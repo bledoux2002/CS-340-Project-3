@@ -1,9 +1,12 @@
 from simulator.node import Node
+import json
 
 
 class Link_State_Node(Node):
     def __init__(self, id):
         super().__init__(id)
+        self.neighbors = {}
+        self.forwarding_table = {}
 
     # Return a string
     def __str__(self):
@@ -33,16 +36,28 @@ class Link_State_Node(Node):
         Returns:
         None
         """
-        # step 1: Update Tables w/ new latency to reach neighbor
-        # latency = -1 if delete a link
-
-
+        
+        # step 1: latency = -1 if delete a link
+        if latency == -1 and neighbor in self.neighbors:
+            del self.neighbors[neighbor]
+            return
+                
+        self.neighbors[neighbor] = latency
+        print(f"I am node: {self.id} and my neighbors are {self.neighbors}")
+        
         # step 2: Update neighbors with new latency to neighbor
-        
-        
-        pass
+        message = {
+            'source': self.id,
+            'neighbors': self.neighbors
+        }
 
-    # Fill in this function
+        # Broadcasting new info to neighbors
+        for n in self.neighbors:
+            if n != neighbor:
+                self.send_to_neighbor(n, json.dumps(message))
+
+        
+
     def process_incoming_routing_message(self, m):
         """
         Choose course of action for message, sending message to
@@ -55,12 +70,18 @@ class Link_State_Node(Node):
         None
         
         """
-        pass
+        message = json.loads(m)
+        neighbors = message['neighbors']
+        
+        # Need to update the latency on our end
+        for neighbor, latency in neighbors.items():
+            if (neighbor, latency) not in self.neighbors:
+                self.neighbors[neighbor] = latency
+                print("A neighbor's latency was updated.")
+            
+        # HERE IS WHERE WE NEED TO RUN DIJKSTRA'S TO FINALLY UPDATE THE 
+        # self.forwarding_table INFORMATION
 
-        # step 1: interpret message
-
-
-        # step 2: choose course of action
 
     # Return a neighbor, -1 if no path to destination
     def get_next_hop(self, destination):
@@ -75,6 +96,7 @@ class Link_State_Node(Node):
         
         """
         # step 1: determine next node to destination from table?
+        print("WANTS NEXT HOP")
 
         hops = -1
         return hops
