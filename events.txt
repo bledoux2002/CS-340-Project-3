@@ -1,0 +1,9 @@
+arrival_time ADD_NODE node_num 
+arrival_time ADD_LINK src_node_num dest_node_num latency 
+arrival_time CHANGE_LINK src_node_num dest_node_num latency
+arrival_time DELETE_LINK src_node_num dest_node_num
+arrival_time DELETE_NODE node_num
+arrival_time DRAW_TOPOLOGY
+arrival_time DRAW_TREE src_node_num
+arrival_time DRAW_PATH src_node_num dst_node_num
+arrival_time DUMP_NODE node_num

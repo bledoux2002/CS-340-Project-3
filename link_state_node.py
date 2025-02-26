@@ -1,5 +1,6 @@
 from simulator.node import Node
 import json
+import heapq
 
 
 class Link_State_Node(Node):
@@ -192,7 +193,6 @@ class Link_State_Node(Node):
 
                 for neigh, _ in self.neighbors:
                     if neigh != neighbor_to_update:
-                        #print("Flooding AGAIN to:", neigh)
                         self.send_to_neighbor(neigh, m)
 
             # If it is a brand new connection, it needs a updated view of the world
@@ -215,7 +215,90 @@ class Link_State_Node(Node):
         
         """
         # step 1: determine next node to destination from table?
-        print("WANTS NEXT HOP")
+        _, _, path = self.dijkstra(destination)
 
-        hops = -1
-        return hops
+        print(f"PATH FROM {self.id} --> {destination} is == {path}")
+        
+        return path[1] # PATH FROM 1 --> 3 is == [1, 0, 3] So therefore our next hop is the first index
+    
+
+    def dijkstra(self, destination):
+        '''
+        Dijkstra's Shortest Path Algorithm
+
+        self.graph = 
+        {
+            0: {2: 2, 1: 2, 3: 100}, 
+            1: {0: 2, 2: 50}, 
+            2: {0: 2, 1: 50}, 
+            3: {0: 100}
+        }
+
+        self.graph[source][dest] = latency
+        '''
+        source = self.id
+        q = []
+        dist = {}
+        prev = {}
+
+        for vertex in self.graph.keys():
+            dist[vertex] = float('inf')
+            prev[vertex] = None
+            heapq.heappush(q, (dist[vertex], vertex))  # (Distance, vertex)
+        
+        dist[source] = 0
+        heapq.heappush(q, (dist[source], source)) 
+
+        while q:
+            curr_dist, u = heapq.heappop(q)
+
+            if curr_dist > dist[u]:
+                continue
+
+            for neighbor_v, latency in self.graph[u].items():
+                alt = dist[u] + latency
+                if alt < dist[neighbor_v]:
+                    dist[neighbor_v] = alt
+                    prev[neighbor_v] = u
+                    heapq.heappush(q, (dist[neighbor_v], neighbor_v))
+
+        path = []
+        u = destination
+        while u is not None:
+            path.append(u)
+            u = prev[u]
+        
+        path.reverse()
+
+        return dist, prev, path
+
+                
+    
+# Wikipedia has always had my favorite pseudocode for Dijkstra's so I based it off of this:
+# https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm
+#  1  function Dijkstra(Graph, source):
+#  2     
+#  3      for each vertex v in Graph.Vertices:
+#  4          dist[v] ← INFINITY
+#  5          prev[v] ← UNDEFINED
+#  6          add v to Q
+#  7      dist[source] ← 0
+#  8     
+#  9      while Q is not empty:
+# 10          u ← vertex in Q with minimum dist[u]
+# 11          remove u from Q
+# 12         
+# 13          for each neighbor v of u still in Q:
+# 14              alt ← dist[u] + Graph.Edges(u, v)
+# 15              if alt < dist[v]:
+# 16                  dist[v] ← alt
+# 17                  prev[v] ← u
+# 18
+# 19      return dist[], prev[]
+    
+# 1  S ← empty sequence
+# 2  u ← target
+# 3  if prev[u] is defined or u = source:          // Proceed if the vertex is reachable
+# 4      while u is defined:                       // Construct the shortest path with a stack S
+# 5          insert u at the beginning of S        // Push the vertex onto the stack
+# 6          u ← prev[u]                           // Traverse from target to source
