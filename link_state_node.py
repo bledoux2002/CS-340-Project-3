@@ -7,6 +7,7 @@ class Link_State_Node(Node):
         super().__init__(id)
         # self.neighbors is defined inside the Node class in simulator/Node.py
         self.graph = {}
+        self.seq_num_tracker = {}
         self.sequence_number = 0
 
     # Return a string
@@ -158,17 +159,25 @@ class Link_State_Node(Node):
                     2A) Now that it has a dict inside of a dict we can do the same logic as 2a and set the latency. 
 
         """
-        m = json.loads(m)
-        source_id = m['source_id']
-        seq_num = m['seq_num']
-        neighbor_to_update = m['neighbor_to_update']
-        new_latency = m['new_latency']
-
+        message = json.loads(m)
+        source_id = message['source_id']
+        seq_num = message['seq_num']
+        neighbor_to_update = message['neighbor_to_update']
+        new_latency = message['new_latency']
+    
         # Bidirectional undirected graph
         self.update_graph(source_id, neighbor_to_update, new_latency)
         self.update_graph(neighbor_to_update, source_id, new_latency)
 
-        # NOTE: I THINK WE NEED TO FLOOD RIGHT HERE BUT NOT SURE
+        if seq_num not in self.seq_num_tracker:
+            self.seq_num_tracker[seq_num] = True
+
+            for neigh, _ in self.neighbors:
+                if neigh != neighbor_to_update:
+                    print("Flooding AGAIN")
+                    self.send_to_neighbor(neigh, m)
+        else:
+            print("Already seen this sequence number.")
 
 
     # Return a neighbor, -1 if no path to destination
