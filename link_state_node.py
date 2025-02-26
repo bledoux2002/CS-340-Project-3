@@ -5,8 +5,9 @@ import json
 class Link_State_Node(Node):
     def __init__(self, id):
         super().__init__(id)
-        self.neighbors = {}
-        self.forwarding_table = {}
+        # self.neighbors is defined inside the Node class in simulator/Node.py
+        self.graph = {}
+        self.sequence_number = 0
 
     # Return a string
     def __str__(self):
@@ -23,6 +24,18 @@ class Link_State_Node(Node):
         """
         return "Rewrite this function to define your node dump printout"
 
+
+    def update_graph(self, source_id, neighbor_to_update, new_latency):
+        if source_id in self.graph:
+            self.graph[source_id][neighbor_to_update] = new_latency
+        else:
+            self.graph[source_id] = {}
+            self.graph[source_id][neighbor_to_update] = new_latency
+
+        print(f"Updated latency between {source_id} and {neighbor_to_update} to ~{new_latency}~ inside of node {self.id}")
+        print(self.graph)
+
+
     # Called to inform Node that outgoing link properties have changed
     def link_has_been_updated(self, neighbor, latency):
         """
@@ -36,28 +49,75 @@ class Link_State_Node(Node):
         Returns:
         None
         """
-        
+
         # step 1: latency = -1 if delete a link
-        if latency == -1 and neighbor in self.neighbors:
-            del self.neighbors[neighbor]
+        if latency == -1:
+            print("COME BACK AND HANDLE THIS")
             return
-                
-        self.neighbors[neighbor] = latency
-        print(f"I am node: {self.id} and my neighbors are {self.neighbors}")
-        
+            
         # step 2: Update neighbors with new latency to neighbor
-        message = {
-            'source': self.id,
-            'neighbors': self.neighbors
-        }
+        # Update our local neighbor mapping.
 
-        # Broadcasting new info to neighbors
-        for n in self.neighbors:
-            if n != neighbor:
-                self.send_to_neighbor(n, json.dumps(message))
+        found = False
+        for index, (neigh, _) in enumerate(self.neighbors):
+            if neigh == neighbor:
+                found = True
+                self.neighbors[index] = (neighbor, latency)
+        if not found:
+            self.neighbors.append((neighbor, latency))
+
+
+        self.update_graph(self.id, neighbor, latency)
+        self.update_graph(neighbor, self.id, latency)
+
+        """
+        NOTE:
+        Just because our local mapping is up to date, doesn't mean other's are. 
+        So we will not "flood" where other routers in the AS will update the source link
+        such that the neighbor of this source link on the other system's end will reflect the new 
+        latency. 
+
+        For example, if the connection between source node 1 and 3 changes to latency 100. Then 
+        we would send out:
+
+            source: 1
+            neighbor_to_update: 3
+            latency: 100
+
+        The next system that receives this message (inside of process_incoming_routing_message), and verifies that it is "new", 
+        can update their internal record so that it reflects something along the lines of:
+
+            {
+                0: [ (neighbor 1, latency), ... (neighbor 3, 100), ...],
+                ...
+                ...
+            }
+
+        This can be thought of as a new router doing:
+
+            self.graph[source][neighbor_to_update] = new_latency
+        """    
+
+        self.sequence_number += 1
+
+        source_id = self.id
+        seq_num = self.sequence_number
+        neighbor_to_update = neighbor
+        new_latency = latency
+        message = json.dumps({
+            'source_id': source_id,
+            'seq_num': seq_num,
+            'neighbor_to_update': neighbor_to_update,
+            'new_latency': new_latency
+        })
+
+        for neigh, _ in self.neighbors:
+            # If it is not the neighbor that already updated the link, we flood
+            if neigh != neighbor:
+                self.send_to_neighbor(neigh, message)
+
 
         
-
     def process_incoming_routing_message(self, m):
         """
         Choose course of action for message, sending message to
@@ -70,17 +130,33 @@ class Link_State_Node(Node):
         None
         
         """
-        message = json.loads(m)
-        neighbors = message['neighbors']
-        
-        # Need to update the latency on our end
-        for neighbor, latency in neighbors.items():
-            if (neighbor, latency) not in self.neighbors:
-                self.neighbors[neighbor] = latency
-                print("A neighbor's latency was updated.")
-            
-        # HERE IS WHERE WE NEED TO RUN DIJKSTRA'S TO FINALLY UPDATE THE 
-        # self.forwarding_table INFORMATION
+
+        """
+        NOTE:
+        Ok you found my next comment on this mission. Think of this function as a separate router 
+        receiving a "flood" request. Therefore, another system is attempting to tell us to update our internal
+        records about a change in latency. 
+
+        We are receiving a source, sequence number, neighbor to update, and a new latency. 
+
+        Things to check:
+            1) If the source id exists
+                2a) If the source id exists, then we can just update it easily as self.graph[source][neighbor] = latency
+                2b) If the source id doesn't exist yet, then we need to set self.graph[source] = {}
+                    2A) Now that it has a dict inside of a dict we can do the same logic as 2a and set the latency. 
+
+        """
+        m = json.loads(m)
+        source_id = m['source_id']
+        seq_num = m['seq_num']
+        neighbor_to_update = m['neighbor_to_update']
+        new_latency = m['new_latency']
+
+        # Bidirectional undirected graph
+        self.update_graph(source_id, neighbor_to_update, new_latency)
+        self.update_graph(neighbor_to_update, source_id, new_latency)
+
+        # NOTE: I THINK WE NEED TO FLOOD RIGHT HERE BUT NOT SURE
 
 
     # Return a neighbor, -1 if no path to destination
