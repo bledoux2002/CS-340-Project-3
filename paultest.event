@@ -6,7 +6,6 @@
 0 ADD_LINK 1 2 2
 0 ADD_LINK 2 0 2
 
-
 # events follow:
 
 2 PRINT "Done"
@@ -14,3 +13,8 @@
 
 3 DRAW_TOPOLOGY
 # 4 DUMP_SIM
+
+5 ADD_NODE 3
+6 ADD_LINK 3 0 4
+7 DRAW_TOPOLOGY
+# 8 DUMP_SIM

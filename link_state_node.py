@@ -9,6 +9,7 @@ class Link_State_Node(Node):
         self.graph = {}
         self.seq_num_tracker = {}
         self.sequence_number = 0
+        self.UPDATE_GRAPH_FLAG = 999
 
     # Return a string
     def __str__(self):
@@ -24,7 +25,6 @@ class Link_State_Node(Node):
         
         """
         return "Rewrite this function to define your node dump printout"
-
 
     def update_graph(self, source_id, neighbor_to_update, new_latency):
         """
@@ -46,7 +46,7 @@ class Link_State_Node(Node):
             self.graph[source_id][neighbor_to_update] = new_latency
 
         print(f"Updated latency between {source_id} and {neighbor_to_update} to ~{new_latency}~ inside of node {self.id}")
-        print(self.graph)
+        # print(self.graph)
 
 
     # Called to inform Node that outgoing link properties have changed
@@ -159,26 +159,48 @@ class Link_State_Node(Node):
                     2A) Now that it has a dict inside of a dict we can do the same logic as 2a and set the latency. 
 
         """
-        message = json.loads(m)
-        source_id = message['source_id']
-        seq_num = message['seq_num']
-        neighbor_to_update = message['neighbor_to_update']
-        new_latency = message['new_latency']
-    
-        # Bidirectional undirected graph
-        self.update_graph(source_id, neighbor_to_update, new_latency)
-        self.update_graph(neighbor_to_update, source_id, new_latency)
 
-        if seq_num not in self.seq_num_tracker:
-            self.seq_num_tracker[seq_num] = True
+        # If it is a dictionary we are telling it to hard reset its internal representation
+        if isinstance(m, dict):
+            self.graph = m
+            print(f"Updated view of the world. NODE {self.id} is {self.graph}")
+            return
+        
+        # Otherwise it is of type JSON, so we process like normal
+        if isinstance(m, str):
+            message = json.loads(m)
+            source_id = message['source_id']
+            seq_num = message['seq_num']
+            neighbor_to_update = message['neighbor_to_update']
+            new_latency = message['new_latency']
+            
+            # Bidirectional undirected graph
+            self.update_graph(source_id, neighbor_to_update, new_latency)
+            self.update_graph(neighbor_to_update, source_id, new_latency)
 
-            for neigh, _ in self.neighbors:
-                if neigh != neighbor_to_update:
-                    print("Flooding AGAIN")
-                    self.send_to_neighbor(neigh, m)
-        else:
-            print("Already seen this sequence number.")
+            # Controlled flooding 
+            new_connection = False
+            if source_id not in self.seq_num_tracker:
+                self.seq_num_tracker[source_id] = {}
+                self.seq_num_tracker[source_id][seq_num] = True
+                new_connection = True
 
+
+            elif seq_num not in self.seq_num_tracker[source_id]:
+                # Sequence number not seen yet for this source
+                self.seq_num_tracker[source_id][seq_num] = True  
+
+                for neigh, _ in self.neighbors:
+                    if neigh != neighbor_to_update:
+                        #print("Flooding AGAIN to:", neigh)
+                        self.send_to_neighbor(neigh, m)
+
+            # If it is a brand new connection, it needs a updated view of the world
+            if new_connection:
+                self.send_to_neighbor(neighbor_to_update, self.graph)
+
+            print(f"Updated view of the world. NODE {self.id} is {self.graph}")
+            
 
     # Return a neighbor, -1 if no path to destination
     def get_next_hop(self, destination):
