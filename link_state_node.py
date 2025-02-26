@@ -74,7 +74,6 @@ class Link_State_Node(Node):
             'seq': self.sequence_number
         })
         
-
         for neigh in self.neighbor_dict.keys():
             if neigh != neighbor:
                 self.send_to_neighbor(neigh, message)
@@ -90,67 +89,48 @@ class Link_State_Node(Node):
 
         Returns:
         None
-
-        Link updated between 2 and 0. Graph = {2: {0: 2}, 0: {2: 2}}
-        Link updated between 0 and 2. Graph = {0: {2: 2}, 2: {0: 2}}
-        Link updated between 2 and 1. Graph = {2: {0: 2, 1: 2}, 0: {2: 2}, 1: {2: 2}}
-        Link updated between 0 and 1. Graph = {0: {2: 2, 1: 2}, 2: {0: 2}, 1: {0: 2}}
-        Link updated between 1 and 0. Graph = {1: {0: 2}, 0: {1: 2}}
-        Link updated between 1 and 2. Graph = {1: {0: 2, 2: 2}, 0: {1: 2}, 2: {1: 2}}
-        [2025-02-26 17:08:53][INFO] Sim: Time: 2, Comment: "Done"
-        incoming routing message
-
-        NODE 2 has an internal representation as: {2: {0: 2, 1: 2}, 0: {2: 2}, 1: {2: 2}}
-        Message updating source 0  dest 1  seq: 1
         
         """
-        print("incoming routing message")
-        print(f"NODE {self.id} has an internal representation as: {self.graph}")
-
         message = json.loads(m)
         source = message['source']
         dest = message['dest']
         cost = message['cost']
         sender = message['sender'] # this will not be consistent across network for each node's self.last_message, sholdnt need to be
         seq = message['seq']
-        print(f"Message updating source {source}  dest {dest}  seq: {seq}  sequence_number: {self.sequence_number}")
+        print(f"Node {self.id}: src {source}, dest {dest}, seq: {seq}, self.seq #: {self.sequence_number}\n    graph: {self.graph}")
 
         if seq >= self.sequence_number + 1:
             # update table and forward
             message['sender'] = self.id
             self.messages[seq] = message
             if source not in self.graph:
-                self.graph[source] = {} 
+                self.graph[source] = {}
             if dest not in self.graph:
                 self.graph[dest] = {}
-            self.graph[source][dest] = cost 
+            self.graph[source][dest] = cost
             self.graph[dest][source] = cost
             
             # seq could be part of bringing outdated node up to speed
             if seq > self.sequence_number + 1:
                 # graph too outdated, send last message back (will receive next message in order, will continue until no longer outdated)
+                print(f"graph outdated by {seq - self.sequence_number} steps")
                 self.send_to_neighbor(sender, json.dumps(self.messages[self.sequence_number]))
             elif seq < max(self.messages): # case where node being updated, check if self.seq is same as largest in messages or still needs to be updated
+                print(f"graph incrementally brought up to date, still {seq - self.sequence_number} steps behind")
                 self.sequence_number += 1
                 self.send_to_neighbor(sender, json.dumps(self.messages[self.sequence_number]))
             else:
                 # graph up to date, now we can flood and update our sequence num (already in messages, up to date graph may have been overwritten from "catch up" steps so redundancy necessary)
+                print("graph should to be up to date now")
                 self.sequence_number += 1
                 for neigh in self.neighbor_dict.keys():
                     if neigh != sender:
                         self.send_to_neighbor(neigh, json.dumps(message))
 
-        elif seq < self.sequence_number:
+        elif seq <= self.sequence_number:
             # send next sequence following received sequence back (updates table for out of date node)
-            if seq + 1 in self.messages:
-                self.send_to_neighbor(sender, json.dumps(self.messages[seq + 1]))
-            else:
-                # Handle the case where the next sequence isn't available
-                # Maybe send the latest message you have or log an error
-                print(f"node {self.id}")
-                latest_available = max(self.messages.keys())
-                self.send_to_neighbor(sender, json.dumps(self.messages[latest_available]))
-     
+            print("Received outdated seq, returning next seq")
+            self.send_to_neighbor(sender, json.dumps(self.messages[seq + 1]))
 
 
     # Return a neighbor, -1 if no path to destination
