@@ -6,11 +6,10 @@ import heapq
 class Link_State_Node(Node):
     def __init__(self, id):
         super().__init__(id)
-        # self.neighbors is defined inside the Node class in simulator/Node.py
+        self.neighbor_dict = {}
         self.graph = {}
-        self.seq_num_tracker = {}
         self.sequence_number = 0
-        self.UPDATE_GRAPH_FLAG = 999
+        self.messages = {}
 
     # Return a string
     def __str__(self):
@@ -28,27 +27,7 @@ class Link_State_Node(Node):
         return "Rewrite this function to define your node dump printout"
 
     def update_graph(self, source_id, neighbor_to_update, new_latency):
-        """
-        ## Description
-        -----------
-        Updates the global network graph of routers to reflect the 
-        most up-to-date latency.
-
-        ## Parameters
-        ----------
-        source_id: Source ID 
-        neighbor_to_update: The pair between source-neighbor that we are updating
-        new_latency: The cost between source and neighbor
-        """
-        if source_id in self.graph:
-            self.graph[source_id][neighbor_to_update] = new_latency
-        else:
-            self.graph[source_id] = {}
-            self.graph[source_id][neighbor_to_update] = new_latency
-
-        print(f"Updated latency between {source_id} and {neighbor_to_update} to ~{new_latency}~ inside of node {self.id}")
-        # print(self.graph)
-
+        pass
 
     # Called to inform Node that outgoing link properties have changed
     def link_has_been_updated(self, neighbor, latency):
@@ -66,72 +45,41 @@ class Link_State_Node(Node):
 
         # step 1: latency = -1 if delete a link
         if latency == -1:
-            print("COME BACK AND HANDLE THIS")
+            print("COME BACK AND HANDLE THIS DELETION")
             return
             
+        # print(f"Link updated between {self.id} and {neighbor} to latency {latency}")
+
         # step 2: Update neighbors with new latency to neighbor
-        # Update our local neighbor mapping.
+        # Link updated between 1 and 2 to latency 2
+        # {0: 2, 2: 2}
+        self.neighbor_dict[neighbor] = latency
 
-        found = False
-        for index, (neigh, _) in enumerate(self.neighbors):
-            if neigh == neighbor:
-                found = True
-                self.neighbors[index] = (neighbor, latency)
-        if not found:
-            self.neighbors.append((neighbor, latency))
+        if self.id not in self.graph: 
+            self.graph[self.id] = {}
+        self.graph[self.id][neighbor] = latency
 
+        if neighbor not in self.graph:
+            self.graph[neighbor] = {}
+        self.graph[neighbor][self.id] = latency
 
-        self.update_graph(self.id, neighbor, latency)
-        self.update_graph(neighbor, self.id, latency)
-
-        """
-        NOTE:
-        Just because our local mapping is up to date, doesn't mean other's are. 
-        So we will not "flood" where other routers in the AS will update the source link
-        such that the neighbor of this source link on the other system's end will reflect the new 
-        latency. 
-
-        For example, if the connection between source node 1 and 3 changes to latency 100. Then 
-        we would send out:
-
-            source: 1
-            neighbor_to_update: 3
-            latency: 100
-
-        The next system that receives this message (inside of process_incoming_routing_message), and verifies that it is "new", 
-        can update their internal record so that it reflects something along the lines of:
-
-            {
-                0: [ (neighbor 1, latency), ... (neighbor 3, 100), ...],
-                ...
-                ...
-            }
-
-        This can be thought of as a new router doing:
-
-            self.graph[source][neighbor_to_update] = new_latency
-        """    
-
+        print(f"Link updated between {self.id} and {neighbor}. Graph = {self.graph}")
+        
         self.sequence_number += 1
-
-        source_id = self.id
-        seq_num = self.sequence_number
-        neighbor_to_update = neighbor
-        new_latency = latency
         message = json.dumps({
-            'source_id': source_id,
-            'seq_num': seq_num,
-            'neighbor_to_update': neighbor_to_update,
-            'new_latency': new_latency
+            'source': self.id,
+            'dest': neighbor,
+            'cost': latency,
+            'sender': self.id,
+            'seq': self.sequence_number
         })
+        
 
-        for neigh, _ in self.neighbors:
-            # If it is not the neighbor that already updated the link, we flood
+        for neigh in self.neighbor_dict.keys():
             if neigh != neighbor:
                 self.send_to_neighbor(neigh, message)
-
-
         
+    
     def process_incoming_routing_message(self, m):
         """
         Choose course of action for message, sending message to
@@ -142,65 +90,68 @@ class Link_State_Node(Node):
 
         Returns:
         None
+
+        Link updated between 2 and 0. Graph = {2: {0: 2}, 0: {2: 2}}
+        Link updated between 0 and 2. Graph = {0: {2: 2}, 2: {0: 2}}
+        Link updated between 2 and 1. Graph = {2: {0: 2, 1: 2}, 0: {2: 2}, 1: {2: 2}}
+        Link updated between 0 and 1. Graph = {0: {2: 2, 1: 2}, 2: {0: 2}, 1: {0: 2}}
+        Link updated between 1 and 0. Graph = {1: {0: 2}, 0: {1: 2}}
+        Link updated between 1 and 2. Graph = {1: {0: 2, 2: 2}, 0: {1: 2}, 2: {1: 2}}
+        [2025-02-26 17:08:53][INFO] Sim: Time: 2, Comment: "Done"
+        incoming routing message
+
+        NODE 2 has an internal representation as: {2: {0: 2, 1: 2}, 0: {2: 2}, 1: {2: 2}}
+        Message updating source 0  dest 1  seq: 1
         
         """
+        print("incoming routing message")
+        print(f"NODE {self.id} has an internal representation as: {self.graph}")
 
-        """
-        NOTE:
-        Ok you found my next comment on this mission. Think of this function as a separate router 
-        receiving a "flood" request. Therefore, another system is attempting to tell us to update our internal
-        records about a change in latency. 
+        message = json.loads(m)
+        source = message['source']
+        dest = message['dest']
+        cost = message['cost']
+        sender = message['sender'] # this will not be consistent across network for each node's self.last_message, sholdnt need to be
+        seq = message['seq']
+        print(f"Message updating source {source}  dest {dest}  seq: {seq}  sequence_number: {self.sequence_number}")
 
-        We are receiving a source, sequence number, neighbor to update, and a new latency. 
-
-        Things to check:
-            1) If the source id exists
-                2a) If the source id exists, then we can just update it easily as self.graph[source][neighbor] = latency
-                2b) If the source id doesn't exist yet, then we need to set self.graph[source] = {}
-                    2A) Now that it has a dict inside of a dict we can do the same logic as 2a and set the latency. 
-
-        """
-
-        # If it is a dictionary we are telling it to hard reset its internal representation
-        if isinstance(m, dict):
-            self.graph = m
-            print(f"Updated view of the world. NODE {self.id} is {self.graph}")
-            return
-        
-        # Otherwise it is of type JSON, so we process like normal
-        if isinstance(m, str):
-            message = json.loads(m)
-            source_id = message['source_id']
-            seq_num = message['seq_num']
-            neighbor_to_update = message['neighbor_to_update']
-            new_latency = message['new_latency']
+        if seq >= self.sequence_number + 1:
+            # update table and forward
+            message['sender'] = self.id
+            self.messages[seq] = message
+            if source not in self.graph:
+                self.graph[source] = {} 
+            if dest not in self.graph:
+                self.graph[dest] = {}
+            self.graph[source][dest] = cost 
+            self.graph[dest][source] = cost
             
-            # Bidirectional undirected graph
-            self.update_graph(source_id, neighbor_to_update, new_latency)
-            self.update_graph(neighbor_to_update, source_id, new_latency)
+            # seq could be part of bringing outdated node up to speed
+            if seq > self.sequence_number + 1:
+                # graph too outdated, send last message back (will receive next message in order, will continue until no longer outdated)
+                self.send_to_neighbor(sender, json.dumps(self.messages[self.sequence_number]))
+            elif seq < max(self.messages): # case where node being updated, check if self.seq is same as largest in messages or still needs to be updated
+                self.sequence_number += 1
+                self.send_to_neighbor(sender, json.dumps(self.messages[self.sequence_number]))
+            else:
+                # graph up to date, now we can flood and update our sequence num (already in messages, up to date graph may have been overwritten from "catch up" steps so redundancy necessary)
+                self.sequence_number += 1
+                for neigh in self.neighbor_dict.keys():
+                    if neigh != sender:
+                        self.send_to_neighbor(neigh, json.dumps(message))
 
-            # Controlled flooding 
-            new_connection = False
-            if source_id not in self.seq_num_tracker:
-                self.seq_num_tracker[source_id] = {}
-                self.seq_num_tracker[source_id][seq_num] = True
-                new_connection = True
+        elif seq < self.sequence_number:
+            # send next sequence following received sequence back (updates table for out of date node)
+            if seq + 1 in self.messages:
+                self.send_to_neighbor(sender, json.dumps(self.messages[seq + 1]))
+            else:
+                # Handle the case where the next sequence isn't available
+                # Maybe send the latest message you have or log an error
+                print(f"node {self.id}")
+                latest_available = max(self.messages.keys())
+                self.send_to_neighbor(sender, json.dumps(self.messages[latest_available]))
+     
 
-
-            elif seq_num not in self.seq_num_tracker[source_id]:
-                # Sequence number not seen yet for this source
-                self.seq_num_tracker[source_id][seq_num] = True  
-
-                for neigh, _ in self.neighbors:
-                    if neigh != neighbor_to_update:
-                        self.send_to_neighbor(neigh, m)
-
-            # If it is a brand new connection, it needs a updated view of the world
-            if new_connection:
-                self.send_to_neighbor(neighbor_to_update, self.graph)
-
-            print(f"Updated view of the world. NODE {self.id} is {self.graph}")
-            
 
     # Return a neighbor, -1 if no path to destination
     def get_next_hop(self, destination):
@@ -219,9 +170,11 @@ class Link_State_Node(Node):
 
         print(f"PATH FROM {self.id} --> {destination} is == {path}")
         
+
+        if len(path) < 2:
+            return -1
         return path[1] # PATH FROM 1 --> 3 is == [1, 0, 3] So therefore our next hop is the first index
     
-
     def dijkstra(self, destination):
         '''
         Dijkstra's Shortest Path Algorithm
@@ -264,7 +217,7 @@ class Link_State_Node(Node):
 
         path = []
         u = destination
-        while u is not None:
+        while u is not None or u == source:
             path.append(u)
             u = prev[u]
         
