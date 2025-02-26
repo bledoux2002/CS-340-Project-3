@@ -26,6 +26,18 @@ class Link_State_Node(Node):
 
 
     def update_graph(self, source_id, neighbor_to_update, new_latency):
+        """
+        ## Description
+        -----------
+        Updates the global network graph of routers to reflect the 
+        most up-to-date latency.
+
+        ## Parameters
+        ----------
+        source_id: Source ID 
+        neighbor_to_update: The pair between source-neighbor that we are updating
+        new_latency: The cost between source and neighbor
+        """
         if source_id in self.graph:
             self.graph[source_id][neighbor_to_update] = new_latency
         else:
