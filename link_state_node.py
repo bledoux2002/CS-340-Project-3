@@ -66,7 +66,7 @@ class Link_State_Node(Node):
 
         # Updating internal graph representation
         self.update_graph(self.id, neighbor, latency)
-
+        
         # Create Link State Advertisement of my newly updated neighbors
         self.sequence_number += 1
         message = {
@@ -77,9 +77,8 @@ class Link_State_Node(Node):
         }
 
         # Flooding
-        for neigh in self.neighbors_dict.keys():
-            if neigh != neighbor:
-                self.send_to_neighbor(neigh, json.dumps(message))
+        self.send_to_neighbors(json.dumps(message))
+
 
 
       
@@ -112,12 +111,9 @@ class Link_State_Node(Node):
 
             # Flooding
             message['previous_router'] = self.id # Updating the previous router to the current router
-            for neigh in new_neighbors.keys():
-                if neigh != previous_router:
-                    self.send_to_neighbor(neigh, json.dumps(message))
+            self.send_to_neighbors(json.dumps(message))
             
         else:
-            print("Already seen sequence number...")
             pass
 
 
@@ -135,16 +131,29 @@ class Link_State_Node(Node):
         hops (int): next Node to reach destination
         
         """
-        # step 1: determine next node to destination from table?
-        print(f"NODE: {self.id} INTERNAL REP: {self.graph}")
-        _, _, path = self.dijkstra(destination)
+        dist, prev = self.dijkstra(destination)
+        path = []
+        u = destination
+        source = self.id
 
-        print(f"PATH FROM {self.id} --> {destination} is == {path}")
-        
-        if len(path) < 2:
+        while u is not None:
+            path.append(u)
+            u = prev[u]
+            
+        if path[-1] == source:
+            path.reverse()
+            return path[1]
+        else:
             return -1
-        return path[1] # PATH FROM 1 --> 3 is == [1, 0, 3] So therefore our next hop is the first index
-    
+
+        # https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm
+        # 1  S ← empty sequence
+        # 2  u ← target
+        # 3  if prev[u] is defined or u = source:          // Proceed if the vertex is reachable
+        # 4      while u is defined:                       // Construct the shortest path with a stack S
+        # 5          insert u at the beginning of S        // Push the vertex onto the stack
+        # 6          u ← prev[u]                           // Traverse from target to source
+
     def dijkstra(self, destination):
         '''
         Dijkstra's Shortest Path Algorithm
@@ -160,68 +169,40 @@ class Link_State_Node(Node):
         self.graph[source][dest] = latency
         '''
         source = self.id
-        q = []
-        dist = {}
-        prev = {}
-
+        n_prime = set() 
+        dist = {}  
+        prev = {}  
+        q = []  
+        
+        # Initialization:
         for vertex in self.graph.keys():
-            dist[vertex] = float('inf')
-            prev[vertex] = None
-            heapq.heappush(q, (dist[vertex], vertex))  # (Distance, vertex)
+            if vertex == source:
+                dist[vertex] = 0  
+            else:
+                dist[vertex] = float('inf')  
+            prev[vertex] = None  
+            
+            heapq.heappush(q, (dist[vertex], vertex))  
         
-        dist[source] = 0
-        heapq.heappush(q, (dist[source], source)) 
-
+        # Loop - until N prime = N
         while q:
-            curr_dist, u = heapq.heappop(q)
-
-            if curr_dist > dist[u]:
-                continue
-
-            for neighbor_v, latency in self.graph[u].items():
-                alt = dist[u] + latency
-                if alt < dist[neighbor_v]:
-                    dist[neighbor_v] = alt
-                    prev[neighbor_v] = u
-                    heapq.heappush(q, (dist[neighbor_v], neighbor_v))
-
-        path = []
-        u = destination
-        while u is not None or u == source:
-            path.append(u)
-            u = prev[u]
+            _, w_vector = heapq.heappop(q)  
+            
+            if w_vector in n_prime:
+                continue  
+            n_prime.add(w_vector)
+            
+            for neighbor_v, weight in self.graph[w_vector].items():
+                if neighbor_v in n_prime:
+                    continue 
+                
+                new_distance = dist[w_vector] + weight
+                if new_distance < dist[neighbor_v]:
+                    dist[neighbor_v] = new_distance
+                    prev[neighbor_v] = w_vector  
+                    heapq.heappush(q, (new_distance, neighbor_v)) 
         
-        path.reverse()
-
-        return dist, prev, path
+        return dist, prev
 
                 
     
-# Wikipedia has always had my favorite pseudocode for Dijkstra's so I based it off of this:
-# https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm
-#  1  function Dijkstra(Graph, source):
-#  2     
-#  3      for each vertex v in Graph.Vertices:
-#  4          dist[v] ← INFINITY
-#  5          prev[v] ← UNDEFINED
-#  6          add v to Q
-#  7      dist[source] ← 0
-#  8     
-#  9      while Q is not empty:
-# 10          u ← vertex in Q with minimum dist[u]
-# 11          remove u from Q
-# 12         
-# 13          for each neighbor v of u still in Q:
-# 14              alt ← dist[u] + Graph.Edges(u, v)
-# 15              if alt < dist[v]:
-# 16                  dist[v] ← alt
-# 17                  prev[v] ← u
-# 18
-# 19      return dist[], prev[]
-    
-# 1  S ← empty sequence
-# 2  u ← target
-# 3  if prev[u] is defined or u = source:          // Proceed if the vertex is reachable
-# 4      while u is defined:                       // Construct the shortest path with a stack S
-# 5          insert u at the beginning of S        // Push the vertex onto the stack
-# 6          u ← prev[u]                           // Traverse from target to source
