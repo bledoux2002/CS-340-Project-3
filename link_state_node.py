@@ -25,7 +25,8 @@ class Link_State_Node(Node):
         state (str): representation of node state
         
         """
-        return "Rewrite this function to define your node dump printout"
+        dump = f"Node {self.id} graph: {self.graph}"
+        return dump
     
     def update_graph(self, source, neighbor, latency):
         '''Bidirectionally updates our graph representation of the world'''
@@ -53,20 +54,29 @@ class Link_State_Node(Node):
         if latency == -1:
             # print(f"A DELETION ARRIVED AT NODE {self.id} TO DELETE {neighbor}")
             # print("Graph before: ", self.graph)
-            # Completely deleting the node
-            if neighbor in self.graph:
-                del self.graph[neighbor] # Completely deleting the node
             
             # Deleting all prior connections to the node
             for key, adjacent in self.graph.items():
                 to_delete = []
                 for neigh in adjacent:
-                    if neigh == neighbor:
+                    if key == source and neigh == neighbor:
                         to_delete.append(neigh)
-                
+                        # del self.graph[key][neighbor]
+                    elif key == neighbor and neigh == source:
+                        to_delete.append(key)
+                        # del self.graph[neighbor][key]
+
                 # Now delete the collected neighbors
                 for neigh in to_delete:
                     del self.graph[key][neigh]
+                    del self.graph[neigh][key]
+
+            # Completely deleting the node
+            if neighbor in self.graph and not self.graph[neighbor]:
+                del self.graph[neighbor] # Completely deleting the node
+            if source in self.graph and not self.graph[source]:
+                del self.graph[source] # Completely deleting the node
+
 
             # print("Graph after: ", self.graph)
         else:
@@ -76,6 +86,7 @@ class Link_State_Node(Node):
                 self.graph[neighbor] = {}
             self.graph[source][neighbor] = latency
             self.graph[neighbor][source] = latency
+
 
 
     # Called to inform Node that outgoing link properties have changed
