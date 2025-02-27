@@ -31,14 +31,44 @@ class Link_State_Node(Node):
         '''Bidirectionally updates our graph representation of the world'''
         source, neighbor, latency = int(source), int(neighbor), int(latency)
         
+        '''
+        What was deleted
+        ----------------
+        Node 1 was deleted
+
+
+        Deleted information
+        -------------------
+        Deletion inside of node: 2
+        Before (neighbors): {0: 2, 1: 50}
+        After (neighbors): {0: 2}
+
+        Updating the graph 
+        ------------------            
+        Graph before:  {2: {0: 2, 1: 50}, 0: {2: 2, 1: 2, 3: 4}, 1: {2: 50, 0: 2}, 3: {0: 4}}
+        Graph after:  {2: {0: 2}, 0: {2: 2, 3: 4}, 3: {0: 4}}
+        '''
+
         # Handling deletion
         if latency == -1:
-            if source in self.graph:
-                if neighbor in self.graph[source]:
-                    del self.graph[source][neighbor]
+            # print(f"A DELETION ARRIVED AT NODE {self.id} TO DELETE {neighbor}")
+            # print("Graph before: ", self.graph)
+            # Completely deleting the node
             if neighbor in self.graph:
-                if source in self.graph[neighbor]:
-                    del self.graph[neighbor][source]
+                del self.graph[neighbor] # Completely deleting the node
+            
+            # Deleting all prior connections to the node
+            for key, adjacent in self.graph.items():
+                to_delete = []
+                for neigh in adjacent:
+                    if neigh == neighbor:
+                        to_delete.append(neigh)
+                
+                # Now delete the collected neighbors
+                for neigh in to_delete:
+                    del self.graph[key][neigh]
+
+            # print("Graph after: ", self.graph)
         else:
             if source not in self.graph:
                 self.graph[source] = {}
@@ -46,6 +76,7 @@ class Link_State_Node(Node):
                 self.graph[neighbor] = {}
             self.graph[source][neighbor] = latency
             self.graph[neighbor][source] = latency
+
 
     # Called to inform Node that outgoing link properties have changed
     def link_has_been_updated(self, neighbor, latency):
@@ -63,8 +94,11 @@ class Link_State_Node(Node):
 
         # If latency is -1 we delete the link from our neighbors list. Otherwise we update our neighbor list
         if latency == -1:
+            print(f"Deletion inside of node: {self.id}")
+            print(f"Before (neighbors): {self.neighbors_dict}")
             if neighbor in self.neighbors_dict:
                 del self.neighbors_dict[neighbor]
+            print(f"After (neighbors): {self.neighbors_dict}")
         else:
             # Updating neighbors
             if neighbor not in self.neighbors_dict:
@@ -147,6 +181,8 @@ class Link_State_Node(Node):
             path.append(u)
             u = prev[u]
             
+        print(self.graph)
+        print(f"PATH {source} to {destination} is: {path}")
         if path[-1] == source:
             path.reverse()
             return path[1]
