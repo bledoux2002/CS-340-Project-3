@@ -30,13 +30,22 @@ class Link_State_Node(Node):
     def update_graph(self, source, neighbor, latency):
         '''Bidirectionally updates our graph representation of the world'''
         source, neighbor, latency = int(source), int(neighbor), int(latency)
-
-        if source not in self.graph:
-            self.graph[source] = {}
-        if neighbor not in self.graph:
-            self.graph[neighbor] = {}
-        self.graph[source][neighbor] = latency
-        self.graph[neighbor][source] = latency
+        
+        # Handling deletion
+        if latency == -1:
+            if source in self.graph:
+                if neighbor in self.graph[source]:
+                    del self.graph[source][neighbor]
+            if neighbor in self.graph:
+                if source in self.graph[neighbor]:
+                    del self.graph[neighbor][source]
+        else:
+            if source not in self.graph:
+                self.graph[source] = {}
+            if neighbor not in self.graph:
+                self.graph[neighbor] = {}
+            self.graph[source][neighbor] = latency
+            self.graph[neighbor][source] = latency
 
     # Called to inform Node that outgoing link properties have changed
     def link_has_been_updated(self, neighbor, latency):
@@ -52,17 +61,15 @@ class Link_State_Node(Node):
         None
         """
 
-        # step 1: latency = -1 if delete a link
+        # If latency is -1 we delete the link from our neighbors list. Otherwise we update our neighbor list
         if latency == -1:
-            print("COME BACK AND HANDLE THIS")
-            return
-            
-        # step 2: Update neighbors with new latency to neighbor
-
-        # Updating neighbors
-        if neighbor not in self.neighbors_dict:
-            self.neighbors_dict[neighbor] = {}
-        self.neighbors_dict[neighbor] = latency
+            if neighbor in self.neighbors_dict:
+                del self.neighbors_dict[neighbor]
+        else:
+            # Updating neighbors
+            if neighbor not in self.neighbors_dict:
+                self.neighbors_dict[neighbor] = {}
+            self.neighbors_dict[neighbor] = latency
 
         # Updating internal graph representation
         self.update_graph(self.id, neighbor, latency)
