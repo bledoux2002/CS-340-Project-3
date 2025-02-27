@@ -6,11 +6,10 @@ import heapq
 class Link_State_Node(Node):
     def __init__(self, id):
         super().__init__(id)
-        # self.neighbors is defined inside the Node class in simulator/Node.py
-        self.neighbors_dict = {}
+        self.neighbor_dict = {}
         self.graph = {}
-        self.seq_num_tracker = {}
         self.sequence_number = 0
+        self.messages = {}
 
     # Return a string
     def __str__(self):
@@ -26,17 +25,9 @@ class Link_State_Node(Node):
         
         """
         return "Rewrite this function to define your node dump printout"
-    
-    def update_graph(self, source, neighbor, latency):
-        '''Bidirectionally updates our graph representation of the world'''
-        source, neighbor, latency = int(source), int(neighbor), int(latency)
 
-        if source not in self.graph:
-            self.graph[source] = {}
-        if neighbor not in self.graph:
-            self.graph[neighbor] = {}
-        self.graph[source][neighbor] = latency
-        self.graph[neighbor][source] = latency
+    def update_graph(self, source_id, neighbor_to_update, new_latency):
+        pass
 
     # Called to inform Node that outgoing link properties have changed
     def link_has_been_updated(self, neighbor, latency):
@@ -54,41 +45,40 @@ class Link_State_Node(Node):
 
         # step 1: latency = -1 if delete a link
         if latency == -1:
-            print("COME BACK AND HANDLE THIS")
+            print("COME BACK AND HANDLE THIS DELETION")
             return
             
+        # print(f"Link updated between {self.id} and {neighbor} to latency {latency}")
+
         # step 2: Update neighbors with new latency to neighbor
+        # Link updated between 1 and 2 to latency 2
+        # {0: 2, 2: 2}
+        self.neighbor_dict[neighbor] = latency
 
-        # Updating neighbors
-        if neighbor not in self.neighbors_dict:
-            self.neighbors_dict[neighbor] = {}
-        self.neighbors_dict[neighbor] = latency
-
-        # Updating internal graph representation
-        if neighbor not in self.graph:
-            self.graph[neighbor] = {}
-        if self.id not in self.graph:
+        if self.id not in self.graph: 
             self.graph[self.id] = {}
-        self.graph[neighbor][self.id] = latency
         self.graph[self.id][neighbor] = latency
 
-        # Create Link State Advertisement of my newly updated neighbors
+        if neighbor not in self.graph:
+            self.graph[neighbor] = {}
+        self.graph[neighbor][self.id] = latency
+
+        print(f"Link updated between {self.id} and {neighbor}. Graph = {self.graph}")
+        
         self.sequence_number += 1
-        message = {
+        message = json.dumps({
             'source': self.id,
-            'seq': self.sequence_number,
-            'new_neighbors': self.neighbors_dict,
-            'previous_router': self.id
-        }
-
-        # Flooding
-        for neigh in self.neighbors_dict.keys():
+            'dest': neighbor,
+            'cost': latency,
+            'sender': self.id,
+            'seq': self.sequence_number
+        })
+        
+        for neigh in self.neighbor_dict.keys():
             if neigh != neighbor:
-                self.send_to_neighbor(neigh, json.dumps(message))
-
-
-      
-
+                self.send_to_neighbor(neigh, message)
+        
+    
     def process_incoming_routing_message(self, m):
         """
         Choose course of action for message, sending message to
@@ -101,39 +91,47 @@ class Link_State_Node(Node):
         None
         
         """
-
-        """
-        NOTE: SEQUENCE NUMBERS
-        ----------------------
-        If the received sequence number is higher, it's a newer update → accept and flood further
-
-        If equal or lower, it's outdated or duplicate information → discard
-        """
         message = json.loads(m)
         source = message['source']
+        dest = message['dest']
+        cost = message['cost']
+        sender = message['sender'] # this will not be consistent across network for each node's self.last_message, sholdnt need to be
         seq = message['seq']
-        new_neighbors = message['new_neighbors']
-        previous_router = message['previous_router']
+        print(f"Node {self.id}: src {source}, dest {dest}, seq: {seq}, self.seq #: {self.sequence_number}\n    graph: {self.graph}")
 
-        if source not in self.seq_num_tracker or seq > self.seq_num_tracker[source]:
-            self.seq_num_tracker[source] = seq
-
-            # Accepting and updating our internal graph of the world
-            for updated_neighbor, updated_latency in new_neighbors.items():
-                self.update_graph(source, updated_neighbor, updated_latency)
-
-            # Flooding
-            message['previous_router'] = self.id # Updating the previous router to the current router
-            for neigh in new_neighbors.keys():
-                if neigh != previous_router:
-                    self.send_to_neighbor(neigh, json.dumps(message))
+        if seq >= self.sequence_number + 1:
+            # update table and forward
+            message['sender'] = self.id
+            self.messages[seq] = message
+            if source not in self.graph:
+                self.graph[source] = {}
+            if dest not in self.graph:
+                self.graph[dest] = {}
+            self.graph[source][dest] = cost
+            self.graph[dest][source] = cost
             
-        else:
-            print("Already seen sequence number...")
-            pass
+            # seq could be part of bringing outdated node up to speed
+            if seq > self.sequence_number + 1:
+                # graph too outdated, send last message back (will receive next message in order, will continue until no longer outdated)
+                print(f"graph outdated by {seq - self.sequence_number} steps")
+                self.send_to_neighbor(sender, json.dumps(self.messages[self.sequence_number]))
+            elif seq < max(self.messages): # case where node being updated, check if self.seq is same as largest in messages or still needs to be updated
+                print(f"graph incrementally brought up to date, still {seq - self.sequence_number} steps behind")
+                self.sequence_number += 1
+                self.send_to_neighbor(sender, json.dumps(self.messages[self.sequence_number]))
+            else:
+                # graph up to date, now we can flood and update our sequence num (already in messages, up to date graph may have been overwritten from "catch up" steps so redundancy necessary)
+                print("graph should to be up to date now")
+                self.sequence_number += 1
+                for neigh in self.neighbor_dict.keys():
+                    if neigh != sender:
+                        self.send_to_neighbor(neigh, json.dumps(message))
 
+        elif seq <= self.sequence_number:
+            # send next sequence following received sequence back (updates table for out of date node)
+            print("Received outdated seq, returning next seq")
+            self.send_to_neighbor(sender, json.dumps(self.messages[seq + 1]))
 
-            
 
     # Return a neighbor, -1 if no path to destination
     def get_next_hop(self, destination):
@@ -148,11 +146,11 @@ class Link_State_Node(Node):
         
         """
         # step 1: determine next node to destination from table?
-        print(f"NODE: {self.id} INTERNAL REP: {self.graph}")
         _, _, path = self.dijkstra(destination)
 
         print(f"PATH FROM {self.id} --> {destination} is == {path}")
         
+
         if len(path) < 2:
             return -1
         return path[1] # PATH FROM 1 --> 3 is == [1, 0, 3] So therefore our next hop is the first index
