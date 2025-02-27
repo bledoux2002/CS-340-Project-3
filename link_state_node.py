@@ -158,8 +158,15 @@ class Link_State_Node(Node):
             self.seq_num_tracker[source] = seq
 
             # Accepting and updating our internal graph of the world
+            remove_neighbors = self.graph[source] # all neighbors of source before, remove new_neighbors from list so only ones remaining are deleted links
             for updated_neighbor, updated_latency in new_neighbors.items():
+                # HERE IS THE PROBLEM if a node is no longer in the source's neighbor list, it remains here, has to be detected that it's different
                 self.update_graph(source, updated_neighbor, updated_latency)
+                if updated_neighbor in remove_neighbors:
+                    del remove_neighbors[updated_neighbor]
+            
+            for neigh in remove_neighbors:
+                self.update_graph(source, neigh, -1)
 
             # Flooding
             message['previous_router'] = self.id # Updating the previous router to the current router
