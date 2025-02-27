@@ -65,12 +65,7 @@ class Link_State_Node(Node):
         self.neighbors_dict[neighbor] = latency
 
         # Updating internal graph representation
-        if neighbor not in self.graph:
-            self.graph[neighbor] = {}
-        if self.id not in self.graph:
-            self.graph[self.id] = {}
-        self.graph[neighbor][self.id] = latency
-        self.graph[self.id][neighbor] = latency
+        self.update_graph(self.id, neighbor, latency)
 
         # Create Link State Advertisement of my newly updated neighbors
         self.sequence_number += 1
@@ -102,13 +97,6 @@ class Link_State_Node(Node):
         
         """
 
-        """
-        NOTE: SEQUENCE NUMBERS
-        ----------------------
-        If the received sequence number is higher, it's a newer update → accept and flood further
-
-        If equal or lower, it's outdated or duplicate information → discard
-        """
         message = json.loads(m)
         source = message['source']
         seq = message['seq']
