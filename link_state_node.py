@@ -153,12 +153,14 @@ class Link_State_Node(Node):
 
         if source not in self.seq_num_tracker or seq > self.seq_num_tracker[source]:
             self.seq_num_tracker[source] = seq
+            
+            # Make sure source exists in the graph before trying to access it
+            if source not in self.graph:
+                self.graph[source] = {}
 
             # Accepting and updating our internal graph of the world
-            print(f"Graph of node {self.id}: {self.graph}")
-            if source in self.graph:
-                # HERE IS THE PROBLEM key error occuring because source node isn't in self.graph for some reason
-                remove_neighbors = copy.deepcopy(self.graph[source]) # all neighbors of source before, remove new_neighbors from list so only ones remaining are deleted links
+            # print(f"Graph of node {self.id}: {self.graph}")
+            remove_neighbors = copy.deepcopy(self.graph[source]) # HERE IS THE PROBLEM key error occuring because source node isn't in self.graph in certain cases
             for updated_neighbor, updated_latency in new_neighbors.items():
                 self.update_graph(source, updated_neighbor, updated_latency)
                 if updated_neighbor in remove_neighbors:
