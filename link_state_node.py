@@ -147,8 +147,17 @@ class Link_State_Node(Node):
             message['previous_router'] = self.id # Updating the previous router to the current router
             self.send_to_neighbors(json.dumps(message))
 
-        else:
-            pass
+        # Outdated seq received, send back updated neighbors
+        elif seq < self.seq_num_tracker[source]:
+            # print("Received outdated seq, returning next seq")
+            msg = {
+                'source': source,
+                'seq': self.seq_num_tracker[source],
+                'new_neighbors': self.graph[source],
+                'previous_router': self.id
+            }
+            self.send_to_neighbor(previous_router, json.dumps(msg))
+            
 
 
     # Return a neighbor, -1 if no path to destination
