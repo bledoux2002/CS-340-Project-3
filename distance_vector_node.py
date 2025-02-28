@@ -1,9 +1,13 @@
 from simulator.node import Node
-
+import json
+import copy
 
 class Distance_Vector_Node(Node):
     def __init__(self, id):
         super().__init__(id)
+        self.neighbors_dict = {} # cost from self.id to neighbor is latency {1 : 2, ...} If we are node 0 it takes cost 2 to reach 1
+        self.distance_vector = {} # {all destinations: (cost, [path of least cost to dest])   
+        self.neighbors_dv = {} # distance_vectors of all neighbors
 
     # Return a string
     def __str__(self):
@@ -35,12 +39,24 @@ class Distance_Vector_Node(Node):
         """
         # step 1: Update Tables w/ new latency to reach neighbor
         # latency = -1 if delete a link
+        if latency == -1:
+            del self.neighbors_dict[neighbor]
+            del self.neighbors_dv[neighbor]
 
+        else:
+            # step 2: Update neighbors with new latency to neighbor
+            self.neighbors_dict[neighbor] = latency
+            self.distance_vector[neighbor] = (latency, [neighbor]) # (cost, least cost path to dest) add path
+        
+        if self.__calculate_dv():
+            # DV has changed, forward to neighbors
+            print("Flooding")
+            message = {
+                'source': self.id,
+                'distance_vector': self.distance_vector
+            }
+            self.send_to_neighbors(json.dumps(message))
 
-        # step 2: Update neighbors with new latency to neighbor
-        
-        
-        pass
 
     # Fill in this function
     def process_incoming_routing_message(self, m):
@@ -55,7 +71,24 @@ class Distance_Vector_Node(Node):
         None
         
         """
-        pass
+        message = json.loads(m)
+        source = message['source'] # Where it came from (our neighbor)
+        new_dv = message['distance_vector']
+
+        # Saving our neighbors distance vector 
+        self.neighbors_dv[source] = new_dv
+
+        # Updating our own distance vector using Bellman-Ford
+        if self.__calculate_dv():
+            # DV has changed, forward to neighbors
+            print("Flooding")
+            message = {
+                'source': self.id,
+                'distance_vector': self.distance_vector
+            }
+            self.send_to_neighbors(json.dumps(message))
+        
+      
 
         # step 1: interpret message
 
@@ -75,6 +108,75 @@ class Distance_Vector_Node(Node):
         
         """
         # step 1: determine next node to destination from table?
+        print("NEXT HOP")
+        print(destination)
+        print(self.distance_vector)
+        print()
+        print()
+        print()
 
         hops = -1
         return hops
+
+
+    # Take our DV and our neighbors_DV and recalculate our DV from scratch, forward to neighbors if different (assuming something changed)
+    def __calculate_dv(self):
+        old_neighbors = copy.deepcopy(self.neighbors_dict)
+        old_dv = copy.deepcopy(self.distance_vector)
+        print(f"NODE {self.id}")
+        print(f"Neighbors Dict {self.neighbors_dict}")
+        print(f"Distance Vector {self.distance_vector}")
+
+        dist = self.__bellman_ford()
+        self.distance_vector = dist
+
+        if self.neighbors_dict != old_neighbors or self.distance_vector != old_dv:
+            print("FLOOD DADDY")
+            return 1
+        return 0
+    
+
+    def __bellman_ford(self):
+        # Initialization
+        dist = {vertex: (float('inf'), []) for vertex in self.neighbors_dict.keys()}        
+        dist[self.id] = (0, [self.id])  
+
+        for _ in range(len(self.neighbors_dict) - 1):
+            for neighbor, cost in self.neighbors_dict.items():
+                u = self.id  
+                v = neighbor                  
+                alt_cost = dist[u][0] + cost
+                
+                if alt_cost < dist[v][0]:
+                    dist[v] = (alt_cost, dist[u][1] + [v])  
+
+        print(f"dist {dist}")
+        return dist
+
+
+    # def __bellman_ford(self):
+    #     # Initialization
+    #     dist = {}
+    #     prev = {}
+
+    #     for vertex in self.distance_vector.keys():
+    #         dist[vertex] = float('inf')
+    #         prev[vertex] = []
+    #     dist[self.id] = 0
+    #     prev[self.id] = [self.id]
+
+    #     # Relax edges 
+    #     for _ in range(len(self.neighbors_dict) - 1):
+    #         for neighbor, cost in self.neighbors_dict.items():
+    #             u = self.id
+    #             v = neighbor
+    #             alt = dist[u] + cost
+
+    #             if alt < dist[v]:
+    #                 dist[v] = alt       
+    #                 prev[v] = prev[u] + [v]
+
+    #     # Outputs are distance and predecessor arrays
+    #     print(f"dist {dist}")
+    #     print(f"prev {prev}")
+    #     return dist, prev
