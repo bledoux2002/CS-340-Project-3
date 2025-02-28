@@ -1,6 +1,7 @@
 from simulator.node import Node
 import json
 import heapq
+import copy
 
 
 class Link_State_Node(Node):
@@ -62,14 +63,10 @@ class Link_State_Node(Node):
                     if key == source and neigh == neighbor:
                         to_delete.append(neigh)
                         # del self.graph[key][neighbor]
-                    elif key == neighbor and neigh == source:
-                        to_delete.append(key)
-                        # del self.graph[neighbor][key]
 
                 # Now delete the collected neighbors
                 for neigh in to_delete:
                     del self.graph[key][neigh]
-                    del self.graph[neigh][key]
 
             # Completely deleting the node
             if neighbor in self.graph and not self.graph[neighbor]:
@@ -158,9 +155,11 @@ class Link_State_Node(Node):
             self.seq_num_tracker[source] = seq
 
             # Accepting and updating our internal graph of the world
-            remove_neighbors = self.graph[source] # all neighbors of source before, remove new_neighbors from list so only ones remaining are deleted links
+            print(f"Graph of node {self.id}: {self.graph}")
+            if source in self.graph:
+                # HERE IS THE PROBLEM key error occuring because source node isn't in self.graph for some reason
+                remove_neighbors = copy.deepcopy(self.graph[source]) # all neighbors of source before, remove new_neighbors from list so only ones remaining are deleted links
             for updated_neighbor, updated_latency in new_neighbors.items():
-                # HERE IS THE PROBLEM if a node is no longer in the source's neighbor list, it remains here, has to be detected that it's different
                 self.update_graph(source, updated_neighbor, updated_latency)
                 if updated_neighbor in remove_neighbors:
                     del remove_neighbors[updated_neighbor]
