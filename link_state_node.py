@@ -1,7 +1,6 @@
 from simulator.node import Node
 import json
 import heapq
-import copy
 
 
 class Link_State_Node(Node):
@@ -51,39 +50,26 @@ class Link_State_Node(Node):
         Graph after:  {2: {0: 2}, 0: {2: 2, 3: 4}, 3: {0: 4}}
         '''
 
-        # Handling deletion
         if latency == -1:
-            # print(f"A DELETION ARRIVED AT NODE {self.id} TO DELETE {neighbor}")
+            # DELETE_LINK
+            # print(f"A DELETION ARRIVED AT NODE {self.id} TO DELETE LINK {source} {neighbor}")
             # print("Graph before: ", self.graph)
+            if source in self.graph:
+                # Check if source in graph, and if neighbor connected to source
+                # should only have to check source to neighbor, not vice versa because that will come from neighbor as source later?
+                if neighbor in self.graph[source]:
+                    del self.graph[source][neighbor] # Completely deleting the node
             
-            # Deleting all prior connections to the node
-            for key, adjacent in self.graph.items():
-                to_delete = []
-                for neigh in adjacent:
-                    if key == source and neigh == neighbor:
-                        to_delete.append(neigh)
-                        # del self.graph[key][neighbor]
-
-                # Now delete the collected neighbors
-                for neigh in to_delete:
-                    del self.graph[key][neigh]
-
-            # Completely deleting the node
-            if neighbor in self.graph and not self.graph[neighbor]:
-                del self.graph[neighbor] # Completely deleting the node
-            if source in self.graph and not self.graph[source]:
-                del self.graph[source] # Completely deleting the node
-
+                # DELETE_NODE
+                if not self.graph[source]:
+                    # All links to source have been deleted, so now we know it was a "DELETE_NODE" command, and to remove it from our graph
+                    del self.graph[source]
 
             # print("Graph after: ", self.graph)
         else:
             if source not in self.graph:
                 self.graph[source] = {}
-            if neighbor not in self.graph:
-                self.graph[neighbor] = {}
             self.graph[source][neighbor] = latency
-            self.graph[neighbor][source] = latency
-
 
 
     # Called to inform Node that outgoing link properties have changed
@@ -153,21 +139,12 @@ class Link_State_Node(Node):
 
         if source not in self.seq_num_tracker or seq > self.seq_num_tracker[source]:
             self.seq_num_tracker[source] = seq
-            
-            # Make sure source exists in the graph before trying to access it
-            if source not in self.graph:
-                self.graph[source] = {}
 
             # Accepting and updating our internal graph of the world
-            # print(f"Graph of node {self.id}: {self.graph}")
-            remove_neighbors = copy.deepcopy(self.graph[source]) # HERE IS THE PROBLEM key error occuring because source node isn't in self.graph in certain cases
+            # print(f"Graph of node {self.id} before: {self.graph}")
             for updated_neighbor, updated_latency in new_neighbors.items():
                 self.update_graph(source, updated_neighbor, updated_latency)
-                if updated_neighbor in remove_neighbors:
-                    del remove_neighbors[updated_neighbor]
-            
-            for neigh in remove_neighbors:
-                self.update_graph(source, neigh, -1)
+            # print(f"Graph of node {self.id} after: {self.graph}")
 
             # Flooding
             message['previous_router'] = self.id # Updating the previous router to the current router
@@ -234,15 +211,10 @@ class Link_State_Node(Node):
         n_prime = set() 
         dist = {}  
         prev = {}  
-        q = []
-        
-        # First pass: collect all vertices from the graph, including neighbors
-        all_vertices = set(self.graph.keys())
-        for vertex in self.graph.values():
-            all_vertices.update(vertex.keys())
+        q = []  
         
         # Initialization:
-        for vertex in all_vertices:
+        for vertex in self.graph.keys():
             if vertex == source:
                 dist[vertex] = 0  
             else:
@@ -258,10 +230,6 @@ class Link_State_Node(Node):
             if w_vector in n_prime:
                 continue  
             n_prime.add(w_vector)
-            
-            # Skip if this vertex doesn't exist in the graph
-            if w_vector not in self.graph:
-                continue
             
             for neighbor_v, weight in self.graph[w_vector].items():
                 if neighbor_v in n_prime:
