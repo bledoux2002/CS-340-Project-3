@@ -234,10 +234,15 @@ class Link_State_Node(Node):
         n_prime = set() 
         dist = {}  
         prev = {}  
-        q = []  
+        q = []
+        
+        # First pass: collect all vertices from the graph, including neighbors
+        all_vertices = set(self.graph.keys())
+        for vertex in self.graph.values():
+            all_vertices.update(vertex.keys())
         
         # Initialization:
-        for vertex in self.graph.keys():
+        for vertex in all_vertices:
             if vertex == source:
                 dist[vertex] = 0  
             else:
@@ -253,6 +258,10 @@ class Link_State_Node(Node):
             if w_vector in n_prime:
                 continue  
             n_prime.add(w_vector)
+            
+            # Skip if this vertex doesn't exist in the graph
+            if w_vector not in self.graph:
+                continue
             
             for neighbor_v, weight in self.graph[w_vector].items():
                 if neighbor_v in n_prime:
