@@ -131,7 +131,6 @@ class Distance_Vector_Node(Node):
         self.distance_vector = dist
 
         if self.neighbors_dict != old_neighbors or self.distance_vector != old_dv:
-            print("FLOOD DADDY")
             return 1
         return 0
     
@@ -153,30 +152,3 @@ class Distance_Vector_Node(Node):
         print(f"dist {dist}")
         return dist
 
-
-    # def __bellman_ford(self):
-    #     # Initialization
-    #     dist = {}
-    #     prev = {}
-
-    #     for vertex in self.distance_vector.keys():
-    #         dist[vertex] = float('inf')
-    #         prev[vertex] = []
-    #     dist[self.id] = 0
-    #     prev[self.id] = [self.id]
-
-    #     # Relax edges 
-    #     for _ in range(len(self.neighbors_dict) - 1):
-    #         for neighbor, cost in self.neighbors_dict.items():
-    #             u = self.id
-    #             v = neighbor
-    #             alt = dist[u] + cost
-
-    #             if alt < dist[v]:
-    #                 dist[v] = alt       
-    #                 prev[v] = prev[u] + [v]
-
-    #     # Outputs are distance and predecessor arrays
-    #     print(f"dist {dist}")
-    #     print(f"prev {prev}")
-    #     return dist, prev
