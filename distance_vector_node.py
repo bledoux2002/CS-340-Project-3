@@ -121,21 +121,16 @@ class Distance_Vector_Node(Node):
 
     # Take our DV and our neighbors_DV and recalculate our DV from scratch, forward to neighbors if different (assuming something changed)
     def __calculate_dv(self):
-        old_neighbors = copy.deepcopy(self.neighbors_dict)
         old_dv = copy.deepcopy(self.distance_vector)
-        print(f"NODE {self.id}")
-        print(f"Neighbors Dict {self.neighbors_dict}")
-        print(f"Distance Vector {self.distance_vector}")
 
         dist, prev = self.__bellman_ford()
-        self.distance_vector = dist
 
-        if self.neighbors_dict != old_neighbors or self.distance_vector != old_dv:
+        if self.distance_vector != old_dv:
             return 1
         return 0
     
 
-    def __bellman_ford(self):
+    def __bellman_ford_paul(self):
         # Initialization
         dist = {vertex: float('inf') for vertex in self.distance_vector.keys()}
         prev = {vertex: None for vertex in self.distance_vector.keys()}
@@ -161,36 +156,39 @@ class Distance_Vector_Node(Node):
         return dist, prev
 
 
-    def __bellman_ford_ben(self):
-        # Initialization
+    def __bellman_ford(self):
+        # Initialize the distance and path dictionaries
         dist = {}
         prev = {}
 
+        # Initialize the distances and previous paths
         for vertex in self.distance_vector.keys():
-            dist[vertex] = float('inf')
-            prev[vertex] = None
-        dist[self.id] = 0
-        # prev[self.id] = [self.id] # full path, try only one for now and deal with infinite loops later
+            dist[vertex] = (float('inf'), [])  # (cost, path) tuple
+            prev[vertex] = None  # For path tracing
 
-        # Relax edges 
+        # Set the starting node distance to 0, with the path just as itself
+        dist[self.id] = (0, [self.id])
+        prev[self.id] = [self.id]
+
+        # Relax edges (repeat for len(distance_vector)-1 iterations)
         for _ in range(len(self.distance_vector) - 1):
-            #for each edge (u, v):
-                #alt = dist[u] + (u, v).cost
-                #if alt < dist[v]:
-                    #dist[v] = alt
-                    #prev[v] = u # change for full path?
-        
-        
             for neighbor, path in self.neighbors_dv.items():
                 u = self.id
                 v = neighbor
-                alt = dist[u] + cost
+                cost = self.neighbors_dict[u][v]  # Get the link cost from u to v
 
-                if alt < dist[v]:
-                    dist[v] = alt       
-                    prev[v] = prev[u] + [v]
+                # Calculate the alternative path cost
+                alt = dist[u][0] + cost  # dist[u][0] is the current cost of u
 
-        # Outputs are distance and predecessor arrays
-        print(f"dist {dist}")
-        print(f"prev {prev}")
+                # Check if the alternative path is shorter
+                if alt < dist[v][0]:
+                    # Update the cost and path for node v
+                    dist[v] = (alt, prev[u] + [v])  # Set the new cost and path
+                    prev[v] = prev[u] + [v]  # Update the previous path to include u -> v
+
+        # Update the node's distance vector (store both cost and path)
+        self.distance_vector = {node: (dist[node][0], dist[node][1]) for node in dist}
+
+        # Outputs for debugging
+        print(f"Updated distance_vector: {self.distance_vector}")
         return dist, prev
