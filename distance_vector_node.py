@@ -127,7 +127,7 @@ class Distance_Vector_Node(Node):
         print(f"Neighbors Dict {self.neighbors_dict}")
         print(f"Distance Vector {self.distance_vector}")
 
-        dist = self.__bellman_ford()
+        dist, prev = self.__bellman_ford()
         self.distance_vector = dist
 
         if self.neighbors_dict != old_neighbors or self.distance_vector != old_dv:
@@ -137,18 +137,60 @@ class Distance_Vector_Node(Node):
 
     def __bellman_ford(self):
         # Initialization
-        dist = {vertex: (float('inf'), []) for vertex in self.neighbors_dict.keys()}        
-        dist[self.id] = (0, [self.id])  
+        dist = {vertex: float('inf') for vertex in self.distance_vector.keys()}
+        prev = {vertex: None for vertex in self.distance_vector.keys()}
+        dist[self.id] = 0  # Distance to the source is 0
 
-        for _ in range(len(self.neighbors_dict) - 1):
-            for neighbor, cost in self.neighbors_dict.items():
-                u = self.id  
-                v = neighbor                  
-                alt_cost = dist[u][0] + cost
-                
-                if alt_cost < dist[v][0]:
-                    dist[v] = (alt_cost, dist[u][1] + [v])  
+        # Relax all edges V-1 times
+        for _ in range(len(self.distance_vector) - 1):
+            for u in self.distance_vector:
+                for v, cost in self.neighbors_dv.get(u, {}).items():  # Assuming neighbors_dv holds neighbors and costs
+                    alt_cost = dist[u] + cost  # cost should be the weight between u and v
+                    if alt_cost < dist[v]:
+                        dist[v] = alt_cost
+                        prev[v] = u
+
+        # Check for negative weight cycles
+        for u in self.distance_vector:
+            for v, cost in self.neighbors_dv.get(u, {}).items():
+                if dist[u] + cost < dist[v]:
+                    print("Graph contains a negative weight cycle")
+                    return None, None
 
         print(f"dist {dist}")
-        return dist
+        return dist, prev
 
+
+    def __bellman_ford_ben(self):
+        # Initialization
+        dist = {}
+        prev = {}
+
+        for vertex in self.distance_vector.keys():
+            dist[vertex] = float('inf')
+            prev[vertex] = None
+        dist[self.id] = 0
+        # prev[self.id] = [self.id] # full path, try only one for now and deal with infinite loops later
+
+        # Relax edges 
+        for _ in range(len(self.distance_vector) - 1):
+            #for each edge (u, v):
+                #alt = dist[u] + (u, v).cost
+                #if alt < dist[v]:
+                    #dist[v] = alt
+                    #prev[v] = u # change for full path?
+        
+        
+            for neighbor, path in self.neighbors_dv.items():
+                u = self.id
+                v = neighbor
+                alt = dist[u] + cost
+
+                if alt < dist[v]:
+                    dist[v] = alt       
+                    prev[v] = prev[u] + [v]
+
+        # Outputs are distance and predecessor arrays
+        print(f"dist {dist}")
+        print(f"prev {prev}")
+        return dist, prev
