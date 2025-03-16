@@ -68,7 +68,7 @@ class Link_State_Node(Node):
 
 
         else:
-            print(f"UPDATE BETWEEN {self.id} AND {neighbor} = {latency}")
+            # print(f"UPDATE BETWEEN {self.id} AND {neighbor} = {latency}")
             self.world_representation[self.id][neighbor] = latency
             self.world_representation[neighbor][self.id] = latency
 
@@ -148,6 +148,9 @@ class Link_State_Node(Node):
 
 
     def update_global_info(self, neighbor_representation):
+        """Helper function that handles sharing information from a more knowledgeable node to a lesser one. 
+        
+        """
         for neighbor_source, neighbor_adj in neighbor_representation.items():
             neighbor_source = int(neighbor_source)
 
