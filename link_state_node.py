@@ -45,21 +45,26 @@ class Link_State_Node(Node):
 
         # If Latency is -1 delete
         if latency == -1:
-            print("DELETION")
             # Update local representation to delete the node completely. 
             # Send the message with latency -1 to all neighbors. And they should also just delete it. 
             if self.id in self.world_representation and neighbor in self.world_representation[self.id]:
                 del self.world_representation[self.id][neighbor]
-                self.sequence_number += 1
-                message = {
-                    'source': self.id,
-                    'destination': neighbor,
-                    'seq': self.sequence_number,
-                    'cost': latency
-                }
+            
+            if neighbor in self.world_representation and self.id in self.world_representation[neighbor]:
+                del self.world_representation[neighbor][self.id]
 
-                # Flooding
-                self.send_to_neighbors(json.dumps(message))
+            self.sequence_number += 1
+            message = {
+                'source': self.id,
+                'destination': neighbor,
+                'seq': self.sequence_number,
+                'cost': latency,
+                'neighbors_representation_of_the_world': self.world_representation
+            }
+
+            # Flooding
+            self.send_to_neighbors(json.dumps(message))
+
 
 
         else:
@@ -114,6 +119,7 @@ class Link_State_Node(Node):
                 if source in self.world_representation and destination in self.world_representation[source]:
                     del self.world_representation[source][destination]
                     self.send_to_neighbors(m)
+                    
             else:                
                 # Add it to the seen set
                 self.seen[source] = seq
@@ -127,6 +133,7 @@ class Link_State_Node(Node):
 
         else:
             # Otherwise source has never been seen, so it is the first time we have heard of it... New. 
+            # print("Entered the new portion")
             self.seen[source] = seq
 
             # Update world representation
@@ -138,6 +145,7 @@ class Link_State_Node(Node):
 
             # Flooding to neighbors
             self.send_to_neighbors(m)
+
 
     def update_global_info(self, neighbor_representation):
         for neighbor_source, neighbor_adj in neighbor_representation.items():
@@ -211,9 +219,9 @@ class Link_State_Node(Node):
         Returns:
         hops (int): next Node to reach destination
         """
-        print("AT THE END")
-        print(f"Finding shortest path between {self.id} and {destination}")
-        print(self.world_representation)
+        # print("AT THE END")
+        # print(f"Finding shortest path between {self.id} and {destination}")
+        # print(self.world_representation)
         dist, prev = self.dijkstra(destination)
         path = []
         u = destination
