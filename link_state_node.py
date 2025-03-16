@@ -161,6 +161,40 @@ class Link_State_Node(Node):
                     self.world_representation[neighbor_source][dest] = cost
          
         
+    def get_next_hop(self, destination):
+        """
+        Node is asked which hop it THINKS is next on path to destination
+
+        Parameters:
+        destination (Node): final destination being searched for
+
+        Returns:
+        hops (int): next Node to reach destination
+
+        """
+        dist, prev = self.dijkstra(destination)
+        path = []
+        u = destination
+        source = self.id
+
+        while u is not None:
+            path.append(u)
+            u = prev[u]
+
+        if path[-1] == source:
+            path.reverse()
+            return path[1]
+        else:
+            return -1
+
+        # https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm
+        # 1  S ← empty sequence
+        # 2  u ← target
+        # 3  if prev[u] is defined or u = source:          // Proceed if the vertex is reachable
+        # 4      while u is defined:                       // Construct the shortest path with a stack S
+        # 5          insert u at the beginning of S        // Push the vertex onto the stack
+        # 6          u ← prev[u]                           // Traverse from target to source
+
     def dijkstra(self, destination):
         '''
         Dijkstra's Shortest Path Algorithm
@@ -176,6 +210,7 @@ class Link_State_Node(Node):
         self.graph[source][dest] = latency
         '''
         source = self.id
+        n_prime = set()
         dist = {}
         prev = {}
         q = []
@@ -187,56 +222,25 @@ class Link_State_Node(Node):
             else:
                 dist[vertex] = float('inf')
             prev[vertex] = None
-            # Push each vertex into the priority queue
+    
             heapq.heappush(q, (dist[vertex], vertex))
 
         # Loop - until N prime = N
         while q:
-            current_dist, w_vector = heapq.heappop(q)
+            _, w_vector = heapq.heappop(q)
 
-            # Skip if the node has already been processed
-            if current_dist > dist[w_vector]:
+            if w_vector in n_prime:
                 continue
+            n_prime.add(w_vector)
 
-            # Process each neighbor
             for neighbor_v, weight in self.world_representation[w_vector].items():
+                if neighbor_v in n_prime:
+                    continue
+
                 new_distance = dist[w_vector] + weight
                 if new_distance < dist[neighbor_v]:
                     dist[neighbor_v] = new_distance
                     prev[neighbor_v] = w_vector
-                    # Push the updated distance to the priority queue
                     heapq.heappush(q, (new_distance, neighbor_v))
 
         return dist, prev
-
-    def get_next_hop(self, destination):
-        """
-        Node is asked which hop it THINKS is next on path to destination
-
-        Parameters:
-        destination (Node): final destination being searched for
-
-        Returns:
-        hops (int): next Node to reach destination
-        """
-        # print("AT THE END")
-        # print(f"Finding shortest path between {self.id} and {destination}")
-        # print(self.world_representation)
-        dist, prev = self.dijkstra(destination)
-        path = []
-        u = destination
-        source = self.id
-
-        # Reconstruct the shortest path
-        while u is not None:
-            path.append(u)
-            u = prev[u]
-
-        # Check if there's a valid path from source to destination
-        if path[-1] == source:
-            path.reverse()
-            # Return the first hop (the second element in the reversed path)
-            return path[1] if len(path) > 1 else -1
-        else:
-            # No valid path
-            return -1
