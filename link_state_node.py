@@ -1,15 +1,15 @@
 from simulator.node import Node
 import json
 import heapq
+from collections import defaultdict
 
 
 class Link_State_Node(Node):
     def __init__(self, id):
         super().__init__(id)
         # self.neighbors is defined inside the Node class in simulator/Node.py
-        self.neighbors_dict = {}
-        self.graph = {}
-        self.seq_num_tracker = {}
+        self.world_representation = defaultdict(lambda: defaultdict(int)) # { id1: {id2: cost}, ...}
+        self.seen = {} # { neighbor: max_sequence_seen_as_int }
         self.sequence_number = 0
 
     # Return a string
@@ -25,51 +25,8 @@ class Link_State_Node(Node):
         state (str): representation of node state
 
         """
-        dump = f"Node {self.id} graph: {self.graph}"
+        dump = f"Node {self.id} graph: {self.world_representation}"
         return dump
-
-    def update_graph(self, source, neighbor, latency):
-        '''Bidirectionally updates our graph representation of the world'''
-        source, neighbor, latency = int(source), int(neighbor), int(latency)
-
-        '''
-        What was deleted
-        ----------------
-        Node 1 was deleted
-
-
-        Deleted information
-        -------------------
-        Deletion inside of node: 2
-        Before (neighbors): {0: 2, 1: 50}
-        After (neighbors): {0: 2}
-
-        Updating the graph
-        ------------------
-        Graph before:  {2: {0: 2, 1: 50}, 0: {2: 2, 1: 2, 3: 4}, 1: {2: 50, 0: 2}, 3: {0: 4}}
-        Graph after:  {2: {0: 2}, 0: {2: 2, 3: 4}, 3: {0: 4}}
-        '''
-
-        if latency == -1:
-            # DELETE_LINK
-            # print(f"A DELETION ARRIVED AT NODE {self.id} TO DELETE LINK {source} {neighbor}")
-            # print("Graph before: ", self.graph)
-            if source in self.graph:
-                # Check if source in graph, and if neighbor connected to source
-                # should only have to check source to neighbor, not vice versa because that will come from neighbor as source later?
-                if neighbor in self.graph[source]:
-                    del self.graph[source][neighbor] # Completely deleting the node
-
-                # DELETE_NODE
-                if not self.graph[source]:
-                    # All links to source have been deleted, so now we know it was a "DELETE_NODE" command, and to remove it from our graph
-                    del self.graph[source]
-
-            # print("Graph after: ", self.graph)
-        else:
-            if source not in self.graph:
-                self.graph[source] = {}
-            self.graph[source][neighbor] = latency
 
 
     # Called to inform Node that outgoing link properties have changed
@@ -86,33 +43,42 @@ class Link_State_Node(Node):
         None
         """
 
-        # If latency is -1 we delete the link from our neighbors list. Otherwise we update our neighbor list
+        # If Latency is -1 delete
         if latency == -1:
-            print(f"Deletion inside of node: {self.id}")
-            print(f"Before (neighbors): {self.neighbors_dict}")
-            if neighbor in self.neighbors_dict:
-                del self.neighbors_dict[neighbor]
-            print(f"After (neighbors): {self.neighbors_dict}")
+            print("DELETION")
+            # Update local representation to delete the node completely. 
+            # Send the message with latency -1 to all neighbors. And they should also just delete it. 
+            if self.id in self.world_representation and neighbor in self.world_representation[self.id]:
+                del self.world_representation[self.id][neighbor]
+                self.sequence_number += 1
+                message = {
+                    'source': self.id,
+                    'destination': neighbor,
+                    'seq': self.sequence_number,
+                    'cost': latency
+                }
+
+                # Flooding
+                self.send_to_neighbors(json.dumps(message))
+
+
         else:
-            # Updating neighbors
-            if neighbor not in self.neighbors_dict:
-                self.neighbors_dict[neighbor] = {}
-            self.neighbors_dict[neighbor] = latency
+            print(f"UPDATE BETWEEN {self.id} AND {neighbor} = {latency}")
+            self.world_representation[self.id][neighbor] = latency
+            self.world_representation[neighbor][self.id] = latency
 
-        # Updating internal graph representation
-        self.update_graph(self.id, neighbor, latency)
+            # Update neighbors on new representation of the world
+            self.sequence_number += 1
+            message = {
+                'source': self.id,
+                'destination': neighbor,
+                'seq': self.sequence_number,
+                'cost': latency,
+                'neighbors_representation_of_the_world': self.world_representation
+            }
 
-        # Create Link State Advertisement of my newly updated neighbors
-        self.sequence_number += 1
-        message = {
-            'source': self.id,
-            'seq': self.sequence_number,
-            'new_neighbors': self.neighbors_dict,
-            'previous_router': self.id
-        }
-
-        # Flooding
-        self.send_to_neighbors(json.dumps(message))
+            # Flooding
+            self.send_to_neighbors(json.dumps(message))
 
 
     def process_incoming_routing_message(self, m):
@@ -130,73 +96,63 @@ class Link_State_Node(Node):
 
         message = json.loads(m)
         source = message['source']
+        destination = message['destination']
         seq = message['seq']
-        new_neighbors = message['new_neighbors']
-        previous_router = message['previous_router']
+        cost = message['cost']
+        neighbors_representation_of_the_world = message['neighbors_representation_of_the_world']
 
-        if source not in self.seq_num_tracker or seq > self.seq_num_tracker[source]:
-            self.seq_num_tracker[source] = seq
 
-            # Accepting and updating our internal graph of the world
-            # print(f"Graph of node {self.id} before: {self.graph}")
-            for updated_neighbor, updated_latency in new_neighbors.items():
-                self.update_graph(source, updated_neighbor, updated_latency)
-            # print(f"Graph of node {self.id} after: {self.graph}")
+        # If the source has been seen before, then check its set of sequence numbers
+        if source in self.seen:
 
-            # Flooding
-            message['previous_router'] = self.id # Updating the previous router to the current router
-            self.send_to_neighbors(json.dumps(message))
-
-        # Outdated seq received, send back updated neighbors
-        elif seq < self.seq_num_tracker[source]:
-            # print("Received outdated seq, returning next seq")
-            msg = {
-                'source': source,
-                'seq': self.seq_num_tracker[source],
-                'new_neighbors': self.graph[source],
-                'previous_router': self.id
-            }
-            self.send_to_neighbor(previous_router, json.dumps(msg))
+            # If the sequence number has been seen, or the sequence number is less than the max -----> do nothing
+            if seq <= self.seen[source]:
+                return
             
+            # Handling a deletion
+            if cost == -1:
+                if source in self.world_representation and destination in self.world_representation[source]:
+                    del self.world_representation[source][destination]
+                    self.send_to_neighbors(m)
+            else:                
+                # Add it to the seen set
+                self.seen[source] = seq
+                
+                # Otherwise this is new. Let's update my own representation and forward this to all neighbors
+                self.world_representation[source][destination] = cost
+                self.world_representation[destination][source] = cost
 
+                # Flooding to neighbors
+                self.send_to_neighbors(m)
 
-    # Return a neighbor, -1 if no path to destination
-    def get_next_hop(self, destination):
-        """
-        Node is asked which hop it THINKS is next on path to destination
-
-        Parameters:
-        destination (Node): final destination being searched for
-
-        Returns:
-        hops (int): next Node to reach destination
-
-        """
-        dist, prev = self.dijkstra(destination)
-        path = []
-        u = destination
-        source = self.id
-
-        while u is not None:
-            path.append(u)
-            u = prev[u]
-
-        print(self.graph)
-        print(f"PATH {source} to {destination} is: {path}")
-        if path[-1] == source:
-            path.reverse()
-            return path[1]
         else:
-            return -1
+            # Otherwise source has never been seen, so it is the first time we have heard of it... New. 
+            self.seen[source] = seq
 
-        # https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm
-        # 1  S ← empty sequence
-        # 2  u ← target
-        # 3  if prev[u] is defined or u = source:          // Proceed if the vertex is reachable
-        # 4      while u is defined:                       // Construct the shortest path with a stack S
-        # 5          insert u at the beginning of S        // Push the vertex onto the stack
-        # 6          u ← prev[u]                           // Traverse from target to source
+            # Update world representation
+            self.world_representation[source][destination] = cost
+            self.world_representation[destination][source] = cost
 
+            # If I am a brand new node, I might be missing information. Update that, too. 
+            self.update_global_info(neighbors_representation_of_the_world)
+
+            # Flooding to neighbors
+            self.send_to_neighbors(m)
+
+    def update_global_info(self, neighbor_representation):
+        for neighbor_source, neighbor_adj in neighbor_representation.items():
+            neighbor_source = int(neighbor_source)
+
+            # If my neighbor has a source that I don't have. I should add that entire representation to my own
+            if neighbor_source not in self.world_representation:
+                self.world_representation[neighbor_source] = defaultdict(int)
+
+            for dest, cost in neighbor_adj.items():
+                dest = int(dest)
+                if dest not in self.world_representation[neighbor_source]:
+                    self.world_representation[neighbor_source][dest] = cost
+         
+        
     def dijkstra(self, destination):
         '''
         Dijkstra's Shortest Path Algorithm
@@ -212,37 +168,67 @@ class Link_State_Node(Node):
         self.graph[source][dest] = latency
         '''
         source = self.id
-        n_prime = set()
         dist = {}
         prev = {}
         q = []
 
         # Initialization:
-        for vertex in self.graph.keys():
+        for vertex in self.world_representation.keys():
             if vertex == source:
                 dist[vertex] = 0
             else:
                 dist[vertex] = float('inf')
             prev[vertex] = None
-    
+            # Push each vertex into the priority queue
             heapq.heappush(q, (dist[vertex], vertex))
 
         # Loop - until N prime = N
         while q:
-            _, w_vector = heapq.heappop(q)
+            current_dist, w_vector = heapq.heappop(q)
 
-            if w_vector in n_prime:
+            # Skip if the node has already been processed
+            if current_dist > dist[w_vector]:
                 continue
-            n_prime.add(w_vector)
 
-            for neighbor_v, weight in self.graph[w_vector].items():
-                if neighbor_v in n_prime:
-                    continue
-
+            # Process each neighbor
+            for neighbor_v, weight in self.world_representation[w_vector].items():
                 new_distance = dist[w_vector] + weight
                 if new_distance < dist[neighbor_v]:
                     dist[neighbor_v] = new_distance
                     prev[neighbor_v] = w_vector
+                    # Push the updated distance to the priority queue
                     heapq.heappush(q, (new_distance, neighbor_v))
 
         return dist, prev
+
+    def get_next_hop(self, destination):
+        """
+        Node is asked which hop it THINKS is next on path to destination
+
+        Parameters:
+        destination (Node): final destination being searched for
+
+        Returns:
+        hops (int): next Node to reach destination
+        """
+        print("AT THE END")
+        print(f"Finding shortest path between {self.id} and {destination}")
+        print(self.world_representation)
+        dist, prev = self.dijkstra(destination)
+        path = []
+        u = destination
+        source = self.id
+
+        # Reconstruct the shortest path
+        while u is not None:
+            path.append(u)
+            u = prev[u]
+
+        # Check if there's a valid path from source to destination
+        if path[-1] == source:
+            path.reverse()
+            # Return the first hop (the second element in the reversed path)
+            return path[1] if len(path) > 1 else -1
+        else:
+            # No valid path
+            return -1
