@@ -42,16 +42,17 @@ class Link_State_Node(Node):
         Returns:
         None
         """
+        print("link_has_been_updated: ", self.id, neighbor, latency)
 
         # If Latency is -1 delete
         if latency == -1:
             # Update local representation to delete the node completely. 
             # Send the message with latency -1 to all neighbors. And they should also just delete it. 
             if self.id in self.world_representation and neighbor in self.world_representation[self.id]:
-                del self.world_representation[self.id][neighbor]
+                self.world_representation[self.id][neighbor] = latency
             
             if neighbor in self.world_representation and self.id in self.world_representation[neighbor]:
-                del self.world_representation[neighbor][self.id]
+                self.world_representation[neighbor][self.id] = latency
 
             self.sequence_number += 1
             message = {
