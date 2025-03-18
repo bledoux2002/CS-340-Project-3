@@ -5,10 +5,11 @@ import copy
 class Distance_Vector_Node(Node):
     def __init__(self, id):
         super().__init__(id)
-        self.neighbors_dict = {} # cost from self.id to neighbor is latency {1 : 2, ...} If we are node 0 it takes cost 2 to reach 1
-        self.distance_vector = {} # {all destinations: (cost, [path of least cost to dest])   
-        self.neighbors_dv = {} # distance_vectors of all neighbors
-
+        self.distance_vector = {} # { dest: cost } 
+        self.neighbors_dict = {} # { direct_neighbor: (cost, next_hop)}
+        self.seen = {} # Tracking sequence numbers { dest: seq }
+        self.sequence_number = 0
+ 
     # Return a string
     def __str__(self):
         """
@@ -37,28 +38,36 @@ class Distance_Vector_Node(Node):
         Returns:
         None
         """
-        # step 1: Update Tables w/ new latency to reach neighbor
-        # latency = -1 if delete a link
-        if latency == -1:
-            del self.neighbors_dict[neighbor]
-            del self.neighbors_dv[neighbor]
 
+        if latency == -1:
+            self.neighbors_dict[neighbor] = latency # Set to -1
         else:
-            # step 2: Update neighbors with new latency to neighbor
+            # New node... Add it to the distance vector and neighbors dict
+            if neighbor not in self.neighbors_dict:
+                self.distance_vector[neighbor] = (latency, neighbor)
             self.neighbors_dict[neighbor] = latency
-            self.distance_vector[neighbor] = (latency, [neighbor]) # (cost, least cost path to dest) add path
-        
-        if self.__calculate_dv():
-            # DV has changed, forward to neighbors
-            print("Flooding")
+
+        # Calculating bellman-ford on this new link change of cost latency to see if anything updates
+        distance_updated = False  
+        for destination in self.distance_vector.keys():
+            neighbor_cost, _ = self.distance_vector.get(neighbor, (float('inf'), None))
+            new_distance = neighbor_cost + latency
+            
+            if new_distance < self.distance_vector[destination][0]:
+                self.distance_vector[destination] = (new_distance, neighbor)
+                distance_updated = True
+
+        if distance_updated:
+            self.sequence_number += 1
             message = {
-                'source': self.id,
-                'distance_vector': self.distance_vector
+                'neighbor': self.id,
+                'neighbor_dv': self.distance_vector,
+                'seq': self.sequence_number
             }
             self.send_to_neighbors(json.dumps(message))
+            
 
 
-    # Fill in this function
     def process_incoming_routing_message(self, m):
         """
         Choose course of action for message, sending message to
@@ -72,28 +81,42 @@ class Distance_Vector_Node(Node):
         
         """
         message = json.loads(m)
-        source = message['source'] # Where it came from (our neighbor)
-        new_dv = message['distance_vector']
+        neighbor = message['neighbor']
+        neighbor_dv = message['neighbor_dv']
+        seq = self.sequence_number
 
-        # Saving our neighbors distance vector 
-        self.neighbors_dv[source] = new_dv
-
-        # Updating our own distance vector using Bellman-Ford
-        if self.__calculate_dv():
-            # DV has changed, forward to neighbors
-            print("Flooding")
-            message = {
-                'source': self.id,
-                'distance_vector': self.distance_vector
-            }
-            self.send_to_neighbors(json.dumps(message))
+        if neighbor in self.seen:
+            if seq < self.seen[neighbor]:
+                return  
         
-      
+        # New message!
+        self.seen[neighbor] = seq  
 
-        # step 1: interpret message
+        distance_updated = False
+        for destination, neighbor_distance in neighbor_dv.items():
+            destination = int(destination)
+            cost = self.neighbors_dict.get(neighbor, float('inf'))
+            
+            # print(neighbor_dv_cost, cost)
+            new_distance = neighbor_distance[0] + cost
 
+            current_cost, _ = self.distance_vector.get(destination, (float('inf'), None))
 
-        # step 2: choose course of action
+            if new_distance < current_cost:
+                self.distance_vector[destination] = (new_distance, neighbor)
+                distance_updated = True
+
+        if distance_updated:
+            self.sequence_number += 1
+            
+            message = {
+                'neighbor': self.id,  
+                'neighbor_dv': self.distance_vector,  
+                'seq': self.sequence_number  
+            }            
+            self.send_to_neighbors(json.dumps(message))
+                
+        
 
     # Return a neighbor, -1 if no path to destination
     def get_next_hop(self, destination):
@@ -107,88 +130,14 @@ class Distance_Vector_Node(Node):
         hops (int): next Node to reach destination
         
         """
-        # step 1: determine next node to destination from table?
-        print("NEXT HOP")
-        print(destination)
-        print(self.distance_vector)
-        print()
-        print()
-        print()
-
-        hops = -1
-        return hops
-
-
-    # Take our DV and our neighbors_DV and recalculate our DV from scratch, forward to neighbors if different (assuming something changed)
-    def __calculate_dv(self):
-        old_dv = copy.deepcopy(self.distance_vector)
-
-        dist, prev = self.__bellman_ford()
-
-        if self.distance_vector != old_dv:
-            return 1
-        return 0
+        # print("NEXT HOP")
+        # print(self.distance_vector)
+        # print(self.id)
+        # print(destination)
+        if destination in self.distance_vector:
+            _, next_hop = self.distance_vector[destination]
+            return next_hop
+        return -1
     
 
-    def __bellman_ford_paul(self):
-        # Initialization
-        dist = {vertex: float('inf') for vertex in self.distance_vector.keys()}
-        prev = {vertex: None for vertex in self.distance_vector.keys()}
-        dist[self.id] = 0  # Distance to the source is 0
 
-        # Relax all edges V-1 times
-        for _ in range(len(self.distance_vector) - 1):
-            for u in self.distance_vector:
-                for v, cost in self.neighbors_dv.get(u, {}).items():  # Assuming neighbors_dv holds neighbors and costs
-                    alt_cost = dist[u] + cost  # cost should be the weight between u and v
-                    if alt_cost < dist[v]:
-                        dist[v] = alt_cost
-                        prev[v] = u
-
-        # Check for negative weight cycles
-        for u in self.distance_vector:
-            for v, cost in self.neighbors_dv.get(u, {}).items():
-                if dist[u] + cost < dist[v]:
-                    print("Graph contains a negative weight cycle")
-                    return None, None
-
-        print(f"dist {dist}")
-        return dist, prev
-
-
-    def __bellman_ford(self):
-        # Initialize the distance and path dictionaries
-        dist = {}
-        prev = {}
-
-        # Initialize the distances and previous paths
-        for vertex in self.distance_vector.keys():
-            dist[vertex] = (float('inf'), [])  # (cost, path) tuple
-            prev[vertex] = None  # For path tracing
-
-        # Set the starting node distance to 0, with the path just as itself
-        dist[self.id] = (0, [self.id])
-        prev[self.id] = [self.id]
-
-        # Relax edges (repeat for len(distance_vector)-1 iterations)
-        for _ in range(len(self.distance_vector) - 1):
-            for neighbor, path in self.neighbors_dv.items():
-                u = self.id
-                v = neighbor
-                cost = self.neighbors_dict[u][v]  # Get the link cost from u to v
-
-                # Calculate the alternative path cost
-                alt = dist[u][0] + cost  # dist[u][0] is the current cost of u
-
-                # Check if the alternative path is shorter
-                if alt < dist[v][0]:
-                    # Update the cost and path for node v
-                    dist[v] = (alt, prev[u] + [v])  # Set the new cost and path
-                    prev[v] = prev[u] + [v]  # Update the previous path to include u -> v
-
-        # Update the node's distance vector (store both cost and path)
-        self.distance_vector = {node: (dist[node][0], dist[node][1]) for node in dist}
-
-        # Outputs for debugging
-        print(f"Updated distance_vector: {self.distance_vector}")
-        return dist, prev
