@@ -47,25 +47,9 @@ class Distance_Vector_Node(Node):
                 self.distance_vector[neighbor] = (latency, neighbor)
             self.neighbors_dict[neighbor] = latency
 
-        # Calculating bellman-ford on this new link change of cost latency to see if anything updates
-        distance_updated = False  
-        for destination in self.distance_vector.keys():
-            neighbor_cost, _ = self.distance_vector.get(neighbor, (float('inf'), None))
-            new_distance = neighbor_cost + latency
-            
-            if new_distance < self.distance_vector[destination][0]:
-                self.distance_vector[destination] = (new_distance, neighbor)
-                distance_updated = True
+        # Calculate Bellman-Ford algorithm. If DV changes, forward to neighbors.
 
-        if distance_updated:
-            self.sequence_number += 1
-            message = {
-                'neighbor': self.id,
-                'neighbor_dv': self.distance_vector,
-                'seq': self.sequence_number
-            }
-            self.send_to_neighbors(json.dumps(message))
-            
+                    
 
 
     def process_incoming_routing_message(self, m):
@@ -81,42 +65,24 @@ class Distance_Vector_Node(Node):
         
         """
         message = json.loads(m)
+        print("Received message:", message)
+
         neighbor = message['neighbor']
         neighbor_dv = message['neighbor_dv']
         seq = self.sequence_number
 
         if neighbor in self.seen:
-            if seq < self.seen[neighbor]:
+            if seq <= self.seen[neighbor]:
                 return  
         
         # New message!
         self.seen[neighbor] = seq  
 
-        distance_updated = False
-        for destination, neighbor_distance in neighbor_dv.items():
-            destination = int(destination)
-            cost = self.neighbors_dict.get(neighbor, float('inf'))
-            
-            # print(neighbor_dv_cost, cost)
-            new_distance = neighbor_distance[0] + cost
-
-            current_cost, _ = self.distance_vector.get(destination, (float('inf'), None))
-
-            if new_distance < current_cost:
-                self.distance_vector[destination] = (new_distance, neighbor)
-                distance_updated = True
-
-        if distance_updated:
-            self.sequence_number += 1
-            
-            message = {
-                'neighbor': self.id,  
-                'neighbor_dv': self.distance_vector,  
-                'seq': self.sequence_number  
-            }            
-            self.send_to_neighbors(json.dumps(message))
+        # Calculate Bellman-Ford algorithm. If DV changes, send to neighbors
                 
-        
+            
+    def bellman_ford(self):
+        pass
 
     # Return a neighbor, -1 if no path to destination
     def get_next_hop(self, destination):
@@ -130,14 +96,15 @@ class Distance_Vector_Node(Node):
         hops (int): next Node to reach destination
         
         """
-        # print("NEXT HOP")
-        # print(self.distance_vector)
-        # print(self.id)
-        # print(destination)
+        print("NEXT HOP")
+        print(self.distance_vector)
+        print(self.id)
+        print(destination)
         if destination in self.distance_vector:
             _, next_hop = self.distance_vector[destination]
             return next_hop
         return -1
-    
+
+        
 
 
